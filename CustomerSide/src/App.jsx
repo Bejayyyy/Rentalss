@@ -1,12 +1,17 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { ChevronDown, ChevronUp } from "lucide-react"
 import { Car, Users, Gauge, Menu, X, Calendar, HeadphonesIcon, CheckCircle, AlertCircle } from "lucide-react"
+
 import { supabase } from "./lib/supabase"
 import HeroPageCar2 from "./assets/HeroPage/car2.png"
 import logo from "./assets/logo/logoRental.png"
+import aboutcra from "./assets/aboutuscar.png"
+import howitworks from "./assets/howitworks.jpg"
 
-import BackgroundImage from "./assets/HeroPage/section_bg.png"
+
+import BackgroundImage from "./assets/HeroPage/section_bg2.png"
 
 // Success/Error Toast Component
 const Toast = ({ type, message, isVisible, onClose }) => {
@@ -40,6 +45,7 @@ const Toast = ({ type, message, isVisible, onClose }) => {
   )
 }
 
+
 // Rental Modal Component
 const RentalModal = ({ isOpen, onClose, selectedCar }) => {
   const [formData, setFormData] = useState({
@@ -55,6 +61,18 @@ const RentalModal = ({ isOpen, onClose, selectedCar }) => {
   const [totalPrice, setTotalPrice] = useState(0)
   const [rentalDays, setRentalDays] = useState(0)
   const [toast, setToast] = useState({ type: '', message: '', isVisible: false })
+
+   // ✅ Prevent background scroll when modal is open
+   useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = "auto"
+    }
+    return () => {
+      document.body.style.overflow = "auto"
+    }
+  }, [isOpen])
 
   // Calculate total price when dates change
   useEffect(() => {
@@ -129,6 +147,7 @@ const RentalModal = ({ isOpen, onClose, selectedCar }) => {
         setIsSubmitting(false)
         return
       }
+      
 
       // Create booking
       const bookingData = {
@@ -180,6 +199,8 @@ const RentalModal = ({ isOpen, onClose, selectedCar }) => {
 
   return (
     <>
+
+    
       <Toast 
         type={toast.type}
         message={toast.message}
@@ -187,8 +208,9 @@ const RentalModal = ({ isOpen, onClose, selectedCar }) => {
         onClose={hideToast}
       />
       
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center">
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
           {/* Modal Header */}
           <div className="flex items-center justify-between p-6 border-b">
             <h2 className="text-2xl font-bold text-gray-900">Rent Your Car</h2>
@@ -196,6 +218,7 @@ const RentalModal = ({ isOpen, onClose, selectedCar }) => {
               <X className="h-6 w-6" />
             </button>
           </div>
+          
 
           {/* Selected Car Info */}
           {selectedCar && (
@@ -241,6 +264,7 @@ const RentalModal = ({ isOpen, onClose, selectedCar }) => {
               )}
             </div>
           )}
+          
 
           {/* Rental Form */}
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
@@ -376,7 +400,7 @@ const Navbar = ({ onRentClick, scrollToSection, refs }) => {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
-    <nav className="bg-white shadow-sm sticky top-0 z-50">
+    <nav className="bg-[#eff2f7] sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
           <div className="flex items-center flex-shrink-0">
@@ -463,25 +487,25 @@ const HeroSection = () => {
 
   return (
     <>
-    <div className="relative h-[1100px] bg-[#F3F7FA] ">
+    <div className="relative h-[1000px] bg-[#eff2f7] ">
       <section className="bg-gradient-to-b w-full overflow-hidden absolute pt-20 pb-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid lg:grid-cols-2 items-center ">
             {/* Left Content */}
-            <div className="lg:pr-16 relative z-20">
+            <div className="lg:pr-16 relative z-20 mb-5">
               <h1 className="text-5xl lg:text-7xl font-bold text-gray-900 leading-tight mb-6">
                 Find Your <br />
                 Perfect Ride <br />
                 Today
               </h1>
-              <p className="text-lg text-gray-600 leading-relaxed">
+              <p className="text-3xl font-normal text-gray-900 leading-relaxed">
                 From Comfort to Luxury, <br />
                 It's All in One Den
               </p>
             </div>
   
             {/* Right Content - Car with animation */}
-            <div className="relative lg:-ml-20 z-10 w-[1100px] -mt-8 flex justify-center">
+            <div className="relative lg:-ml-25 z-50 w-[1100px] -mt-8 flex justify-center">
               {/* Speed Blur Effect */}
               <div
                 className="absolute inset-y-10 right-0 w-full rounded-full blur-3xl"
@@ -497,7 +521,7 @@ const HeroSection = () => {
               <img
                 src={HeroPageCar2}
                 alt={HeroPageCar2}
-                className={`w-full max-w-3xl object-contain drop-shadow-2xl transform transition-all duration-1000 ease-out ${
+                className={`w-full max-w-4xl object-contain drop-shadow-2xl transform transition-all duration-1000 ease-out ${
                   loaded ? "scale-100 opacity-100" : "scale-75 opacity-0"
                 }`}
                 style={{
@@ -513,8 +537,9 @@ const HeroSection = () => {
   
       {/* New Section with Background Image */}
       <section
-        className="w-full h-200 bg-cover bg-center"
-        style={{ backgroundImage: `url(${BackgroundImage})`, position: `absolute`, top: `300px` }}
+        className="w-full h-full bg-cover bg-center"
+        style={{ backgroundImage: `url(${BackgroundImage})`, position: `absolute`, top: `80px` }}
+        
       ></section>
     </div>
       
@@ -546,7 +571,7 @@ const WhyChooseUs = () => {
   ]
 
   return (
-    <section className="py-20 relative">
+    <section className="py-20  bg-[#F0F5F8] relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">Why Choose Us?</h2>
         <p className="text-lg text-gray-600 mb-16 max-w-3xl mx-auto leading-relaxed">
@@ -574,20 +599,20 @@ const WhyChooseUs = () => {
 // About Section Component
 const AboutSection = () => {
   return (
-    <section className="py-20 bg-white">
+    <section className="py-20 py-20 bg-[#F0F5F8]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-16 items-start">
           {/* Left Side - Vertical Image */}
           <div>
             <img
-              src="https://images.unsplash.com/photo-1503376780353-7e6692767b70?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=800&q=80"
+              src={aboutcra}
               alt="Car side mirror with blurred road background"
-              className="w-full h-[600px] object-cover rounded-2xl shadow-lg"
+              className="w-[1000px] h-[400px] rounded-xl object-cover shadow-lg"
             />
           </div>
 
           {/* Right Side - Content */}
-          <div className="flex items-center justify-center h-[600px]">
+          <div className="flex items-center justify-center h-[400px]">
             <div className="text-center text-gray-500">
               <div className="rounded-lg flex items-center justify-center">
                 <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-16 text-left">About Rental Den</h2>
@@ -609,50 +634,117 @@ const AboutSection = () => {
   )
 }
 
+// HowItWorks Component
+const HowItWorks = () => {
+  const steps = [
+    {
+      number: "01",
+      title: "Find a Car You'll Love",
+      description:
+        "Take a look through our curated collection of vehicles. Whether you need efficiency, space, or a bit of luxury, your perfect match is waiting for you right here in our fleet.",
+    },
+    {
+      number: "02",
+      title: "Secure Your Dates Online",
+      description:
+        "Once you’ve made your choice, our simple booking process makes it a breeze to lock in your rental. Just pick your dates, provide a few details, and your car will be reserved just for you.",
+    },
+    {
+      number: "03",
+      title: "Start Your Adventure",
+      description:
+        "Come see us to pick up your keys! Our friendly team will get you checked in quickly so you can start your journey. All that's left to do is enjoy the ride.",
+    },
+  ]
+
+  return (
+    <section className="relative w-full overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-2">
+        {/* Left column */}
+        <div className="bg-[#101010] text-white py-16 lg:py-20 px-6 md:px-10 lg:pl-16 xl:pl-24 lg:pr-10 flex flex-col">
+          {/* Centered heading */}
+          <div className="flex justify-center">
+            <h2 className="text-4xl lg:text-5xl font-bold mb-10">How It Works</h2>
+          </div>
+
+          {/* Steps */}
+          <div className="space-y-12 max-w-2xl mx-auto">
+            {steps.map((s) => (
+              <div key={s.number} className="flex items-start">
+                <span className="text-5xl font-bold leading-none mr-6 w-16">{s.number}</span>
+                <div className="mt-5"> {/* pushes title slightly below the number */}
+                  <h3 className="text-xl font-semibold mb-2">{s.title}</h3>
+                  <p className="text-gray-300 leading-relaxed">{s.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right column: background image */}
+        <div className="relative">
+          <img
+            src={howitworks}
+            alt="Car side mirror on a rainy road"
+            className="absolute top-0 right-0 w-full h-full object-cover"
+          />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+
+
 // Car Card Component
 const CarCard = ({ car, onRentClick }) => {
   const defaultImage =
     "https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80"
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 hover:scale-105">
-      <div className="relative">
-        <img
-          src={car.image_url || defaultImage}
-          alt={`${car.make} ${car.model}`}
-          loading="lazy"
-          className="w-full h-56 object-cover"
-        />
+    <div className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 hover:scale-105 w-full max-w-[500px] mx-auto">
+   <div className="relative">
+  <img
+    src={car.image_url || defaultImage}
+    alt={`${car.make} ${car.model}`}
+    loading="lazy"
+    className={`w-full h-64 object-cover ${
+      !car.available ? "filter blur-xs" : ""
+    }`}
+  />
 
-        {!car.available && (
-          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-            <span className="text-white font-bold text-lg">Not Available</span>
-          </div>
-        )}
-      </div>
+  {!car.available && (
+    <div className="absolute inset-0 flex items-center justify-center">
+      <span className="text-white font-bold text-2xl bg-opacity-60 px-4 py-2 rounded-lg">
+        Not Available
+      </span>
+    </div>
+  )}
+</div>
 
-      <div className="p-8">
-        <h3 className="text-2xl font-bold text-gray-900 mb-6">
+
+      <div className="p-6">
+        <h3 className="text-2xl font-bold text-gray-900 mb-4">
           {car.make} {car.model} ({car.year})
         </h3>
 
         {/* Car specifications */}
-        <div className="flex items-center justify-between mb-8 text-sm text-gray-600">
+        <div className="flex items-center justify-between mb-6 text-sm text-gray-900">
           <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center">
-              <Gauge className="h-3 w-3" />
+            <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center">
+              <Gauge className="h-5 w-5" />
             </div>
             <span>{car.mileage ? `${car.mileage.toLocaleString()} km` : "N/A"}</span>
           </div>
           <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center">
-              <Users className="h-3 w-3" />
+            <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center">
+              <Users className="h-5 w-5" />
             </div>
             <span>{car.seats} seats</span>
           </div>
           <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center">
-              <Car className="h-3 w-3" />
+            <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center">
+              <Car className="h-5 w-5" />
             </div>
             <span>{car.type}</span>
           </div>
@@ -660,7 +752,7 @@ const CarCard = ({ car, onRentClick }) => {
 
         {/* Price and availability */}
         <div className="mb-6">
-          <div className="text-2xl font-bold text-green-600 mb-2">₱{car.price_per_day}/day</div>
+          <div className="text-2xl font-bold text-green-600 mb-1">₱{car.price_per_day}/day</div>
           <div className="text-sm text-gray-500">
             Available: {car.available_quantity}/{car.total_quantity} units
           </div>
@@ -668,19 +760,17 @@ const CarCard = ({ car, onRentClick }) => {
         </div>
 
         {/* Buttons */}
-        <div className="flex space-x-4">
-          <button
-            onClick={() => onRentClick(car)}
-            disabled={!car.available || car.available_quantity === 0}
-            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
-              car.available && car.available_quantity > 0
-                ? "bg-black text-white hover:bg-gray-800 cursor-pointer"
-                : "bg-gray-300 text-gray-500 cursor-not-allowed"
-            }`}
-          >
-            {car.available && car.available_quantity > 0 ? "Rent Now" : "Unavailable"}
-          </button>
-        </div>
+        <button
+          onClick={() => onRentClick(car)}
+          disabled={!car.available || car.available_quantity === 0}
+          className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
+            car.available && car.available_quantity > 0
+              ? "bg-black text-white hover:bg-gray-800 cursor-pointer"
+              : "bg-gray-300 text-gray-500 cursor-not-allowed"
+          }`}
+        >
+          {car.available && car.available_quantity > 0 ? "Rent Now" : "Unavailable"}
+        </button>
       </div>
     </div>
   )
@@ -696,12 +786,12 @@ const FleetSection = ({ onRentClick }) => {
     const fetchVehicles = async () => {
       try {
         setLoading(true)
-        const { data, error } = await supabase.from("vehicles").select("*").order("created_at", { ascending: false })
+        const { data, error } = await supabase
+          .from("vehicles")
+          .select("*")
+          .order("created_at", { ascending: false })
 
-        if (error) {
-          throw error
-        }
-
+        if (error) throw error
         setVehicles(data || [])
       } catch (error) {
         console.error("Error fetching vehicles:", error)
@@ -714,68 +804,104 @@ const FleetSection = ({ onRentClick }) => {
     fetchVehicles()
   }, [])
 
-  if (loading) {
-    return (
-      <section className="py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">Explore Our Fleet</h2>
-            <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              Find the perfect car for your needs with our special rental offers. We provide a wide selection of
-              vehicles, easy booking, and exceptional value for your next journey.
-            </p>
-          </div>
-
-          <div className="flex justify-center items-center py-20">
-            <div className="text-lg text-gray-600">Loading vehicles...</div>
-          </div>
-        </div>
-      </section>
-    )
-  }
-
-  if (error) {
-    return (
-      <section className="py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">Explore Our Fleet</h2>
-            <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              Find the perfect car for your needs with our special rental offers. We provide a wide selection of
-              vehicles, easy booking, and exceptional value for your next journey.
-            </p>
-          </div>
-
-          <div className="flex justify-center items-center py-20">
-            <div className="text-lg text-red-600">Error loading vehicles: {error}</div>
-          </div>
-        </div>
-      </section>
-    )
-  }
-
   return (
-    <section className="py-20 bg-gray-50">
+    <section className="py-20 bg-[#F0F5F8]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">Explore Our Fleet</h2>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            Find the perfect car for your needs with our special rental offers. We provide a wide selection of vehicles,
-            easy booking, and exceptional value for your next journey.
+            Find the perfect car for your needs with our special rental offers. We provide a wide selection of
+            vehicles, easy booking, and exceptional value for your next journey.
           </p>
         </div>
 
-        {vehicles.length === 0 ? (
+        {loading ? (
+          <div className="flex justify-center  items-center py-20">
+            <div className="text-lg text-gray-600">Loading vehicles...</div>
+          </div>
+        ) : error ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="text-lg text-red-600">Error loading vehicles: {error}</div>
+          </div>
+        ) : vehicles.length === 0 ? (
           <div className="flex justify-center items-center py-20">
             <div className="text-lg text-gray-600">No vehicles available at the moment.</div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 auto-rows-fr">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 place-items-center">
             {vehicles.map((vehicle) => (
               <CarCard key={vehicle.id} car={vehicle} onRentClick={onRentClick} />
             ))}
           </div>
         )}
+      </div>
+    </section>
+  )
+}
+
+
+const FAQs = () => {
+  const [openIndex, setOpenIndex] = useState(null)
+
+  const faqs = [
+    {
+      question: "What do I need to rent a car?",
+      answer:
+        "You’ll need a valid driver’s license, a government-issued ID, and a credit or debit card for the security deposit.",
+    },
+    {
+      question: "Can I extend my booking?",
+      answer:
+        "Yes, as long as the car is available. Simply reach out to us before your rental period ends to extend your booking.",
+    },
+    {
+      question: "Is insurance included?",
+      answer:
+        "All rentals include basic insurance coverage. You can also upgrade to full coverage for extra peace of mind.",
+    },
+    {
+      question: "Do you offer delivery or pickup services?",
+      answer:
+        "Yes! We can deliver the car to your preferred location or arrange pickup at one of our designated points.",
+    },
+  ]
+
+  const toggleFAQ = (index) => {
+    setOpenIndex(openIndex === index ? null : index)
+  }
+
+  return (
+    <section className="bg-[#101010] text-white py-20 px-6 md:px-10 lg:px-20">
+      <div className="max-w-5xl mx-auto">
+        <div className="text-center mb-12">
+          <h2 className="text-4xl lg:text-5xl font-bold mb-4">FAQs</h2>
+          <p className="text-gray-300 text-lg">
+            Have a question? We’ve got you covered. Here are some of our most frequently asked questions.
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          {faqs.map((faq, index) => (
+            <div
+              key={index}
+              className="bg-[#1A1A1A] rounded-2xl p-6 shadow-md cursor-pointer transition hover:bg-[#222222]"
+              onClick={() => toggleFAQ(index)}
+            >
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">{faq.question}</h3>
+                {openIndex === index ? (
+                  <ChevronUp className="w-6 h-6 text-gray-400" />
+                ) : (
+                  <ChevronDown className="w-6 h-6 text-gray-400" />
+                )}
+              </div>
+
+              {openIndex === index && (
+                <p className="text-gray-400 mt-4 leading-relaxed">{faq.answer}</p>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   )
@@ -790,6 +916,7 @@ const App = () => {
   const whyChooseUsRef = useRef(null)
   const aboutRef = useRef(null)
   const fleetRef = useRef(null)
+  const faqRef = useRef(null) 
 
   const handleRentClick = (car = null) => {
     setSelectedCar(car)
@@ -806,19 +933,22 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-[#F0F5F8] flex flex-col">
-     <Navbar
+      <Navbar
         onRentClick={() => handleRentClick()}
         scrollToSection={scrollToSection}
-        refs={{ heroRef, whyChooseUsRef, aboutRef, fleetRef }}
+        refs={{ heroRef, whyChooseUsRef, aboutRef, fleetRef, faqRef }}
       />
 
       <div ref={heroRef}><HeroSection /></div>
       <div ref={whyChooseUsRef}><WhyChooseUs /></div>
       <div ref={aboutRef}><AboutSection /></div>
+      {/* New Section Here */}
+      <HowItWorks />
       <div ref={fleetRef}><FleetSection onRentClick={handleRentClick} /></div>
 
-     
       <RentalModal isOpen={isModalOpen} onClose={handleCloseModal} selectedCar={selectedCar} />
+            <div ref={faqRef}><FAQs /></div>
+
       
       <style>{`
         @keyframes slide-in {
@@ -839,5 +969,6 @@ const App = () => {
     </div>
   )
 }
+
 
 export default App
