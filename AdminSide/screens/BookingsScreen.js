@@ -18,6 +18,10 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Circle, Line, Stop, LinearGradient, Defs } from 'react-native-svg';
 import { Calendar } from 'react-native-calendars';
 import { supabase } from '../services/supabase';
+import { Dropdown } from 'react-native-element-dropdown';
+import { Button } from 'react-native';
+import BookingForm from '../components/BookingScreen/BookingForm';
+import ActionModal from '../components/AlertModal/ActionModal';
 
 const { width } = Dimensions.get('window');
 
@@ -27,6 +31,8 @@ export default function BookingsScreen() {
   const [filteredBookings, setFilteredBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [addModalVisible, setAddModalVisible] = useState(false);
+
   
   // Enhanced overview filters with proper cascading
   const [overviewFilter, setOverviewFilter] = useState('Weekly');
@@ -126,20 +132,27 @@ export default function BookingsScreen() {
           pickup_location,
           license_number,
           vehicle_id,
+          vehicle_variant_id,
+          gov_id_url, 
           vehicles (
             make,
             model,
             year
+          ),
+          vehicle_variants (
+            color,
+            available_quantity,
+            total_quantity
           )
         `)
         .order('created_at', { ascending: false });
-
+  
       if (error) {
         console.error('Error fetching bookings:', error);
         Alert.alert('Error', 'Failed to fetch bookings');
         return;
       }
-
+  
       setBookings(data || []);
     } catch (error) {
       console.error('Error:', error);
@@ -149,23 +162,36 @@ export default function BookingsScreen() {
       setRefreshing(false);
     }
   };
+  
 
   const fetchAvailableVehicles = async () => {
     const { data, error } = await supabase
-      .from('vehicles')
-      .select('id, make, model, year, available_quantity')
-      .eq('available', true)
-      .gt('available_quantity', 0);
-
+      .from('vehicle_variants')
+      .select(`
+        id,
+        color,
+        image_url,
+        available_quantity,
+        total_quantity,
+        vehicle_id,
+        vehicles (
+          make,
+          model,
+          year
+        )
+      `)
+      .gt('available_quantity', 0); // only show available ones
+  
     if (error) {
-      console.error('Error fetching vehicles:', error);
+      console.error('Error fetching variants:', error);
       return;
     }
-    
+  
     setAvailableVehicles(data || []);
-    const types = [...new Set(data?.map(vehicle => vehicle.make) || [])];
+    const types = [...new Set(data?.map(variant => variant.vehicles?.make) || [])];
     setVehicleTypes(types);
   };
+  
 
   const addNewBooking = async (newBookingData) => {
     try {
@@ -214,40 +240,57 @@ export default function BookingsScreen() {
   };
 
   const deleteBooking = async (bookingId) => {
-    Alert.alert(
-      'Delete Booking',
-      'Are you sure you want to delete this booking? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('bookings')
-                .delete()
-                .eq('id', bookingId);
-
-              if (error) {
-                console.error('Delete booking error:', error);
-                Alert.alert('Error', 'Failed to delete booking');
-                return;
-              }
-
-              setBookings(prev => prev.filter(booking => booking.id !== bookingId));
-              closeEditModal();
-              await fetchAvailableVehicles();
-              Alert.alert('Success', 'Booking deleted successfully');
-            } catch (error) {
-              console.error('Delete booking error:', error);
-              Alert.alert('Error', 'Something went wrong while deleting booking');
-            }
+    showConfirmation(
+      "Delete Booking",
+      "Are you sure you want to delete this booking?",
+      async () => {
+        try {
+          // 1️⃣ Fetch booking before delete
+          const { data: booking, error: fetchError } = await supabase
+            .from("bookings")
+            .select("status, vehicle_variant_id")
+            .eq("id", bookingId)
+            .single();
+  
+          if (fetchError) {
+            console.error("Fetch error:", fetchError);
+            Alert.alert("Error", "Failed to fetch booking details before delete");
+            return;
           }
+  
+          // 2️⃣ Delete booking
+          const { error } = await supabase
+            .from("bookings")
+            .delete()
+            .eq("id", bookingId);
+  
+          if (error) {
+            console.error("Delete error:", error);
+            Alert.alert("Error", "Failed to delete booking");
+            return;
+          }
+  
+          // 3️⃣ Adjust availability in frontend if needed
+          if (booking.status === "confirmed" && booking.vehicle_variant_id) {
+            await supabase.rpc("adjust_variant_quantity", {
+              variant_id: booking.vehicle_variant_id,
+              change: +1,
+            });
+          }
+  
+          // 4️⃣ Refresh UI
+          await fetchBookings();
+          await fetchAvailableVehicles();
+          closeEditModal();
+          Alert.alert("Success", "Booking deleted successfully");
+        } catch (err) {
+          console.error("Delete booking error:", err);
+          Alert.alert("Error", "Something went wrong while deleting booking");
         }
-      ]
+      }
     );
   };
+  
 
   const filterBookings = () => {
     let filtered = [...bookings];
@@ -486,12 +529,28 @@ export default function BookingsScreen() {
     );
   };
 
-  const updateBooking = async (updatedBooking) => {
+  const updateBooking = async (updatedBooking) => { 
     showConfirmation(
       'Save Changes',
       'Are you sure you want to save these changes to the booking?',
       async () => {
         try {
+          // 1️⃣ Fetch the existing booking first
+          const { data: existingBooking, error: fetchError } = await supabase
+            .from('bookings')
+            .select('status, vehicle_variant_id')
+            .eq('id', updatedBooking.id)
+            .single();
+  
+          if (fetchError) {
+            console.error('Fetch error:', fetchError);
+            Alert.alert('Error', 'Failed to fetch booking details');
+            return;
+          }
+  
+          
+  
+          // 3️⃣ Update the booking row itself
           const { error } = await supabase
             .from('bookings')
             .update({
@@ -504,17 +563,19 @@ export default function BookingsScreen() {
               pickup_location: updatedBooking.pickup_location,
               license_number: updatedBooking.license_number,
               vehicle_id: updatedBooking.vehicle_id,
+              vehicle_variant_id: updatedBooking.vehicle_variant_id,
               status: updatedBooking.status,
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
             })
             .eq('id', updatedBooking.id);
-
+  
           if (error) {
             console.error('Booking update error:', error);
             Alert.alert('Error', 'Failed to update booking');
             return;
           }
-
+  
+          // 4️⃣ Refresh UI
           await fetchBookings();
           await fetchAvailableVehicles();
           closeEditModal();
@@ -526,6 +587,8 @@ export default function BookingsScreen() {
       }
     );
   };
+  
+  
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -591,13 +654,6 @@ export default function BookingsScreen() {
     });
   }, [modalAnimation]);
 
-  const openAddBookingModal = useCallback(() => {
-    setAddBookingModalVisible(true);
-  }, []);
-
-  const closeAddBookingModal = useCallback(() => {
-    setAddBookingModalVisible(false);
-  }, []);
 
   const handleLogout = async () => {
     try {
@@ -852,6 +908,9 @@ export default function BookingsScreen() {
     );
   };
 
+
+  
+
   const VehicleTypeDropdown = () => {
     const vehicleTypeOptions = ['All', ...vehicleTypes];
     
@@ -890,368 +949,190 @@ export default function BookingsScreen() {
   };
 
   // Add Booking Modal Component
-  const AddBookingModal = () => {
-    const [newBooking, setNewBooking] = useState({
-      customer_name: '',
-      customer_email: '',
-      customer_phone: '',
-      rental_start_date: '',
-      rental_end_date: '',
-      total_price: '',
-      status: 'pending',
-      pickup_location: '',
-      license_number: '',
-      vehicle_id: null
-    });
-    
+  
+  const AddBookingModal = ({ isVisible, onClose, refreshBookings }) => {
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [govIdFile, setGovIdFile] = useState(null);
+    const [cars, setCars] = useState([]);
+    const [variants, setVariants] = useState([]);
+    const [selectedCar, setSelectedCar] = useState(null);
+  
     const [vehiclePickerVisible, setVehiclePickerVisible] = useState(false);
     const [datePickerVisible, setDatePickerVisible] = useState(false);
     const [dateField, setDateField] = useState(null);
 
-    const resetForm = () => {
-      setNewBooking({
-        customer_name: '',
-        customer_email: '',
-        customer_phone: '',
-        rental_start_date: '',
-        rental_end_date: '',
-        total_price: '',
-        status: 'pending',
-        pickup_location: '',
-        license_number: '',
-        vehicle_id: null
+    const [confirmVisible, setConfirmVisible] = useState(false);
+  const [deleteVisible, setDeleteVisible] = useState(false);
+    const [formData, setFormData] = useState({
+      customer_name: "",
+      customer_email: "",
+      customer_phone: "",
+      pickup_location: "",
+      license_number: "",
+      rental_start_date: "",
+      rental_end_date: "",
+      vehicle_id: "",
+      vehicle_variant_id: "",
+      total_price: 0,
+      status: "pending",
+    });
+    
+  
+    // Fetch vehicles
+    useEffect(() => {
+      const fetchCars = async () => {
+        const { data, error } = await supabase.from("vehicles").select("*");
+        if (!error) setCars(data);
+      };
+      fetchCars();
+    }, []);
+  
+    // Fetch variants
+    useEffect(() => {
+      const fetchVariants = async () => {
+        const { data, error } = await supabase.from("vehicle_variants").select("*");
+        if (!error) setVariants(data);
+      };
+      fetchVariants();
+    }, []);
+  
+    // Pick Gov ID
+    const pickGovIdFile = async () => {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Permission required", "Allow access to photos.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.7,
       });
+      if (!result.canceled) setGovIdFile(result.assets[0]);
     };
-
-    const handleSave = async () => {
-      // Validation
-      if (!newBooking.customer_name.trim()) {
-        Alert.alert('Validation Error', 'Customer name is required');
+  
+    // Calculate total price
+    let totalPrice = 0;
+    if (selectedCar && formData.pickupDate && formData.returnDate) {
+      const start = new Date(formData.pickupDate);
+      const end = new Date(formData.returnDate);
+      const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+      if (days > 0) totalPrice = days * Number(selectedCar.price_per_day);
+    }
+  
+    // Submit booking
+    const handleSubmit = async () => {
+      if (!formData.fullName || !formData.email || !formData.phone) {
+        Alert.alert("Validation Error", "Fill out all required fields.");
         return;
       }
-      if (!newBooking.customer_email.trim()) {
-        Alert.alert('Validation Error', 'Customer email is required');
+      if (!formData.vehicleId) {
+        Alert.alert("Validation Error", "Select a vehicle.");
         return;
       }
-      if (!newBooking.vehicle_id) {
-        Alert.alert('Validation Error', 'Please select a vehicle');
+      if (!formData.pickupDate || !formData.returnDate) {
+        Alert.alert("Validation Error", "Select rental dates.");
         return;
       }
-      if (!newBooking.rental_start_date) {
-        Alert.alert('Validation Error', 'Please select a start date');
+      if (!govIdFile) {
+        Alert.alert("Validation Error", "Upload Government ID.");
         return;
       }
-      if (!newBooking.rental_end_date) {
-        Alert.alert('Validation Error', 'Please select an end date');
-        return;
-      }
-      if (!newBooking.total_price.trim()) {
-        Alert.alert('Validation Error', 'Total price is required');
-        return;
-      }
-
-      const success = await addNewBooking(newBooking);
-      if (success) {
-        resetForm();
-        closeAddBookingModal();
+  
+      setIsSubmitting(true);
+      try {
+        const fileName = `${Date.now()}_${govIdFile.fileName || "govid.jpg"}`;
+        const { error: uploadError } = await supabase.storage
+          .from("gov_ids")
+          .upload(fileName, {
+            uri: govIdFile.uri,
+            type: "image/jpeg",
+            name: fileName,
+          });
+        if (uploadError) throw uploadError;
+  
+        const { data: urlData } = supabase.storage.from("gov_ids").getPublicUrl(fileName);
+        const govIdUrl = urlData?.publicUrl || "";
+  
+        const bookingRow = {
+          vehicle_id: formData.vehicleId,
+          vehicle_variant_id: formData.vehicleVariantId || null,
+          customer_name: formData.fullName,
+          customer_email: formData.email,
+          customer_phone: formData.phone,
+          rental_start_date: formData.pickupDate,
+          rental_end_date: formData.returnDate,
+          pickup_location: formData.pickupLocation,
+          license_number: formData.licenseNumber,
+          total_price: totalPrice,
+          gov_id_url: govIdUrl,
+          status: "pending",
+        };
+  
+        const { error } = await supabase.from("bookings").insert([bookingRow]);
+        if (error) throw error;
+  
+        Alert.alert("Success", "Booking submitted!");
+        refreshBookings?.();
+        onClose();
+      } catch (err) {
+        console.error(err);
+        Alert.alert("Error", "Booking failed.");
+      } finally {
+        setIsSubmitting(false);
       }
     };
-
-    const selectedVehicle = availableVehicles.find(v => v.id === newBooking.vehicle_id);
-
+  
+    const selectedVehicle = cars.find(v => v.id === formData.vehicleId);
+  
     return (
-      <Modal
-        visible={addBookingModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
+      <Modal visible={isVisible} animationType="none" transparent>
         <SafeAreaView style={styles.modalContainer}>
+          
+          {/* 🔹 Same HEADER as EditBookingModal */}
           <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              onPress={() => {
-                resetForm();
-                closeAddBookingModal();
-              }} 
-              style={styles.modalHeaderButton}
-            >
+            <TouchableOpacity onPress={onClose} style={styles.modalHeaderButton}>
               <Ionicons name="close" size={24} color="#374151" />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Add New Booking</Text>
+  
+            <Text style={styles.modalTitle}>Add Booking</Text>
+  
             <TouchableOpacity
-              onPress={handleSave}
+              onPress={handleSubmit}
               style={[styles.modalHeaderButton, styles.saveButtonContainer]}
+              disabled={isSubmitting}
             >
-              <Text style={styles.saveButton}>Save</Text>
+              <Text style={styles.saveButton}>
+                {isSubmitting ? "Saving..." : "Save"}
+              </Text>
             </TouchableOpacity>
           </View>
-
+          {/* 🔹 END HEADER */}
+  
+          {/* FORM */}
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* Customer Information */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="person-circle-outline" size={20} color="#3b82f6" />
-                <Text style={styles.sectionTitle}>Customer Information</Text>
-              </View>
+          <BookingForm
+            booking={formData}
+            setBooking={setFormData}
+            availableVehicles={variants}
+            styles={styles}
+            formatDate={formatDate}
+            setDatePickerVisible={setDatePickerVisible}
+            setDateField={setDateField}
+            setVehiclePickerVisible={setVehiclePickerVisible}
+            isEdit={false} // ✅ hide status selector
+          />
+</ScrollView>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Customer Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newBooking.customer_name}
-                  onChangeText={(text) => setNewBooking(prev => ({...prev, customer_name: text}))}
-                  placeholder="Enter customer name"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Email *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newBooking.customer_email}
-                  onChangeText={(text) => setNewBooking(prev => ({...prev, customer_email: text}))}
-                  keyboardType="email-address"
-                  placeholder="Enter email address"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Phone Number</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newBooking.customer_phone}
-                  onChangeText={(text) => setNewBooking(prev => ({...prev, customer_phone: text}))}
-                  keyboardType="phone-pad"
-                  placeholder="+63 xxx xxxx xxx"
-                />
-              </View>
-            </View>
-
-            {/* Rental Details */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="car-outline" size={20} color="#3b82f6" />
-                <Text style={styles.sectionTitle}>Rental Details</Text>
-              </View>
-
-              <View style={styles.inputRow}>
-                <View style={[styles.inputGroup, styles.inputHalf]}>
-                  <Text style={styles.inputLabel}>Start Date *</Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setDatePickerVisible(true);
-                      setDateField("start");
-                    }}
-                    style={[styles.input, styles.dateInput]}
-                  >
-                    <Text style={[
-                      styles.dateInputText,
-                      !newBooking.rental_start_date && styles.placeholderText
-                    ]}>
-                      {newBooking.rental_start_date ? formatDate(newBooking.rental_start_date) : "Select start date"}
-                    </Text>
-                    <Ionicons name="calendar-outline" size={16} color="#6b7280" />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={[styles.inputGroup, styles.inputHalf]}>
-                  <Text style={styles.inputLabel}>End Date *</Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setDatePickerVisible(true);
-                      setDateField("end");
-                    }}
-                    style={[styles.input, styles.dateInput]}
-                  >
-                    <Text style={[
-                      styles.dateInputText,
-                      !newBooking.rental_end_date && styles.placeholderText
-                    ]}>
-                      {newBooking.rental_end_date ? formatDate(newBooking.rental_end_date) : "Select end date"}
-                    </Text>
-                    <Ionicons name="calendar-outline" size={16} color="#6b7280" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Total Price *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newBooking.total_price}
-                  onChangeText={(text) => setNewBooking(prev => ({...prev, total_price: text}))}
-                  keyboardType="numeric"
-                  placeholder="Enter total price"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Pickup Location</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newBooking.pickup_location}
-                  onChangeText={(text) => setNewBooking(prev => ({...prev, pickup_location: text}))}
-                  placeholder="Enter pickup location"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>License Number</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newBooking.license_number}
-                  onChangeText={(text) => setNewBooking(prev => ({...prev, license_number: text}))}
-                  placeholder="Enter license number"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Vehicle *</Text>
-                <TouchableOpacity
-                  onPress={() => setVehiclePickerVisible(true)}
-                  style={[styles.input, styles.vehicleInput]}
-                >
-                  <View style={styles.vehicleInputContent}>
-                    <View>
-                      <Text style={[
-                        styles.vehicleInputText,
-                        !selectedVehicle && styles.placeholderText
-                      ]}>
-                        {selectedVehicle ? 
-                          `${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}` :
-                          "Select a vehicle"
-                        }
-                      </Text>
-                      {selectedVehicle?.make && (
-                        <Text style={styles.vehicleInputType}>
-                          {selectedVehicle.make}
-                        </Text>
-                      )}
-                    </View>
-                    <Ionicons name="chevron-down" size={16} color="#6b7280" />
-                  </View>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Status</Text>
-                <View style={styles.statusContainer}>
-                  {["pending", "confirmed", "completed", "cancelled"].map((status) => (
-                    <TouchableOpacity
-                      key={status}
-                      style={[
-                        styles.statusOption,
-                        newBooking.status === status && styles.statusOptionSelected,
-                      ]}
-                      onPress={() => setNewBooking(prev => ({...prev, status}))}
-                    >
-                      <Text
-                        style={
-                          newBooking.status === status
-                            ? styles.statusOptionTextSelected
-                            : styles.statusOptionText
-                        }
-                      >
-                        {status.charAt(0).toUpperCase() + status.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            </View>
-          </ScrollView>
-
-          {/* Vehicle Picker Modal */}
-          <Modal
-            visible={vehiclePickerVisible}
-            transparent
-            animationType="fade"
-          >
-            <TouchableOpacity 
-              style={styles.modalOverlay}
-              activeOpacity={1}
-              onPress={() => setVehiclePickerVisible(false)}
-            >
-              <View style={styles.vehiclePickerContainer}>
-                <View style={styles.pickerHeader}>
-                  <Text style={styles.pickerTitle}>Select Vehicle</Text>
-                  <TouchableOpacity onPress={() => setVehiclePickerVisible(false)}>
-                    <Ionicons name="close" size={24} color="#374151" />
-                  </TouchableOpacity>
-                </View>
-                <FlatList
-                  data={availableVehicles}
-                  keyExtractor={(item) => item.id.toString()}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      onPress={() => {
-                        setNewBooking(prev => ({...prev, vehicle_id: item.id}));
-                        setVehiclePickerVisible(false);
-                      }}
-                      style={[
-                        styles.vehiclePickerItem,
-                        newBooking.vehicle_id === item.id && styles.vehiclePickerItemSelected
-                      ]}
-                    >
-                      <View style={styles.vehiclePickerItemContent}>
-                        <Text style={styles.vehiclePickerText}>
-                          {item.year} {item.make} {item.model}
-                        </Text>
-                        <Text style={styles.vehiclePickerType}>{item.make}</Text>
-                      </View>
-                      {newBooking.vehicle_id === item.id && (
-                        <Ionicons name="checkmark" size={18} color="#3b82f6" />
-                      )}
-                    </TouchableOpacity>
-                  )}
-                  ListEmptyComponent={
-                    <Text style={styles.emptyVehicleText}>No vehicles available</Text>
-                  }
-                />
-              </View>
-            </TouchableOpacity>
-          </Modal>
-
-          {/* Date Picker Modal */}
-          {datePickerVisible && (
-            <Modal visible transparent animationType="fade">
-              <View style={styles.modalOverlay}>
-                <View style={styles.calendarContainer}>
-                  <View style={styles.calendarHeader}>
-                    <Text style={styles.calendarTitle}>
-                      Select {dateField === "start" ? "Start" : "End"} Date
-                    </Text>
-                    <TouchableOpacity onPress={() => setDatePickerVisible(false)}>
-                      <Ionicons name="close" size={24} color="#374151" />
-                    </TouchableOpacity>
-                  </View>
-                  <Calendar
-                    onDayPress={(day) => {
-                      const field = dateField === "start" ? "rental_start_date" : "rental_end_date";
-                      setNewBooking(prev => ({...prev, [field]: day.dateString}));
-                      setDatePickerVisible(false);
-                    }}
-                    markedDates={{
-                      [newBooking.rental_start_date]: { selected: true, selectedColor: '#3b82f6' },
-                      [newBooking.rental_end_date]: { selected: true, selectedColor: '#10b981' },
-                    }}
-                    theme={{
-                      selectedDayBackgroundColor: '#3b82f6',
-                      selectedDayTextColor: '#ffffff',
-                      todayTextColor: '#3b82f6',
-                      dayTextColor: '#1f2937',
-                      textDisabledColor: '#d1d5db',
-                      monthTextColor: '#1f2937',
-                      arrowColor: '#3b82f6',
-                    }}
-                  />
-                </View>
-              </View>
-            </Modal>
-          )}
+  
+          {/* Vehicle Picker Modal, Date Picker Modal ... (keep your same logic here) */}
+  
         </SafeAreaView>
       </Modal>
     );
   };
+  
+
 
   // Enhanced Edit Booking Modal
   const EditBookingModal = () => {
@@ -1262,17 +1143,49 @@ export default function BookingsScreen() {
     const [datePickerVisible, setDatePickerVisible] = useState(false);
     const [dateField, setDateField] = useState(null);
 
+    const [confirmVisible, setConfirmVisible] = useState(false);
+  const [deleteVisible, setDeleteVisible] = useState(false);
+
+
     useEffect(() => {
       if (selectedBooking) {
         setEditableBooking({ ...selectedBooking });
       }
     }, [selectedBooking]);
 
-    const handleSave = () => {
+    const handleSave = () => setConfirmVisible(true);
+    const handleConfirmSave = () => {
       updateBooking(editableBooking);
+      setConfirmVisible(false);
     };
 
-    const selectedVehicle = availableVehicles.find(v => v.id === editableBooking.vehicle_id) || editableBooking.vehicles;
+    const handleDelete = () => setDeleteVisible(true);
+  const handleConfirmDelete = () => {
+    deleteBooking(editableBooking.id);
+    setDeleteVisible(false);
+  };
+
+
+    const selectedVehicle = availableVehicles.find(v => v.vehicle_id === editableBooking.vehicle_id)?.vehicles || editableBooking.vehicles || null;
+
+    // dedupe vehicles so the vehicle picker shows actual vehicles (one entry per vehicle)
+const uniqueVehicles = React.useMemo(() => {
+  const map = {};
+  (availableVehicles || []).forEach(variant => {
+    const vid = variant.vehicle_id;
+    if (!vid) return;
+    // variant.vehicles is the nested vehicles object from the supabase select
+    if (!map[vid]) {
+      map[vid] = {
+        vehicle_id: vid,
+        make: variant.vehicles?.make,
+        model: variant.vehicles?.model,
+        year: variant.vehicles?.year,
+      };
+    }
+  });
+  return Object.values(map);
+}, [availableVehicles]);
 
     return (
       <Modal
@@ -1294,418 +1207,64 @@ export default function BookingsScreen() {
             ],
           },
         ]}>
-          <SafeAreaView style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={closeEditModal} style={styles.modalHeaderButton}>
-                <Ionicons name="close" size={24} color="#374151" />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>Edit Booking</Text>
-              <TouchableOpacity
-                onPress={handleSave}
-                style={[styles.modalHeaderButton, styles.saveButtonContainer]}
-              >
-                <Text style={styles.saveButton}>Save</Text>
-              </TouchableOpacity>
-            </View>
+          {/* HEADER with Exit and Save */}
+          <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={closeEditModal} style={styles.modalHeaderButton}>
+            <Ionicons name="close" size={24} color="#374151" />
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Edit Booking</Text>
+          <TouchableOpacity
+            onPress={handleSave}
+            style={[styles.modalHeaderButton, styles.saveButtonContainer]}
+          >
+            <Text style={styles.saveButton}>Save</Text>
+          </TouchableOpacity>
+        </View>
 
-            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-              {/* Customer Information */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Ionicons name="person-circle-outline" size={20} color="#3b82f6" />
-                  <Text style={styles.sectionTitle}>Customer Information</Text>
-                </View>
+        {/* FORM */}
+        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+        <BookingForm
+          booking={editableBooking}
+          setBooking={setEditableBooking}
+          availableVehicles={availableVehicles}
+          styles={styles}
+          formatDate={formatDate}
+          setDatePickerVisible={setDatePickerVisible}
+          setDateField={setDateField}
+          setVehiclePickerVisible={setVehiclePickerVisible}
+          isEdit={true} // ✅ show status selector
+        />
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Customer Name</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={editableBooking.customer_name}
-                    onChangeText={(text) => setEditableBooking(prev => ({...prev, customer_name: text}))}
-                    placeholder="Enter customer name"
-                  />
-                </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Email</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={editableBooking.customer_email}
-                    onChangeText={(text) => setEditableBooking(prev => ({...prev, customer_email: text}))}
-                    keyboardType="email-address"
-                    placeholder="Enter email address"
-                  />
-                </View>
+          {/* Delete Button */}
+          <View style={styles.section}>
+            <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
+              <Ionicons name="trash-outline" size={20} color="#ef4444" />
+              <Text style={styles.deleteButtonText}>Delete Booking</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+        <ActionModal
+          visible={confirmVisible}
+          type="confirm"
+          onClose={() => setConfirmVisible(false)}
+          onConfirm={handleConfirmSave}
+        />
+      <ActionModal
+        visible={deleteVisible}
+        type="delete"
+        onClose={() => setDeleteVisible(false)}
+        onConfirm={handleConfirmDelete}
+      />
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Phone Number</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={editableBooking.customer_phone}
-                    onChangeText={(text) => setEditableBooking(prev => ({...prev, customer_phone: text}))}
-                    keyboardType="phone-pad"
-                    placeholder="+63 xxx xxxx xxx"
-                  />
-                </View>
-              </View>
 
-              {/* Rental Details */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Ionicons name="car-outline" size={20} color="#3b82f6" />
-                  <Text style={styles.sectionTitle}>Rental Details</Text>
-                </View>
 
-                <View style={styles.inputRow}>
-                  <View style={[styles.inputGroup, styles.inputHalf]}>
-                    <Text style={styles.inputLabel}>Start Date</Text>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setDatePickerVisible(true);
-                        setDateField("start");
-                      }}
-                      style={[styles.input, styles.dateInput]}
-                    >
-                      <Text style={styles.dateInputText}>
-                        {editableBooking.rental_start_date ? formatDate(editableBooking.rental_start_date) : "Select start date"}
-                      </Text>
-                      <Ionicons name="calendar-outline" size={16} color="#6b7280" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={[styles.inputGroup, styles.inputHalf]}>
-                    <Text style={styles.inputLabel}>End Date</Text>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setDatePickerVisible(true);
-                        setDateField("end");
-                      }}
-                      style={[styles.input, styles.dateInput]}
-                    >
-                      <Text style={styles.dateInputText}>
-                        {editableBooking.rental_end_date ? formatDate(editableBooking.rental_end_date) : "Select end date"}
-                      </Text>
-                      <Ionicons name="calendar-outline" size={16} color="#6b7280" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Total Price</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={editableBooking.total_price?.toString()}
-                    onChangeText={(text) => setEditableBooking(prev => ({...prev, total_price: text}))}
-                    keyboardType="numeric"
-                    placeholder="Enter total price"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Pickup Location</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={editableBooking.pickup_location}
-                    onChangeText={(text) => setEditableBooking(prev => ({...prev, pickup_location: text}))}
-                    placeholder="Enter pickup location"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>License Number</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={editableBooking.license_number}
-                    onChangeText={(text) => setEditableBooking(prev => ({...prev, license_number: text}))}
-                    placeholder="Enter license number"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Vehicle</Text>
-                  <TouchableOpacity
-                    onPress={() => setVehiclePickerVisible(true)}
-                    style={[styles.input, styles.vehicleInput]}
-                  >
-                    <View style={styles.vehicleInputContent}>
-                      <View>
-                        <Text style={styles.vehicleInputText}>
-                          {selectedVehicle ? 
-                            `${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}` :
-                            "Select a vehicle"
-                          }
-                        </Text>
-                        {selectedVehicle?.make && (
-                          <Text style={styles.vehicleInputType}>
-                            {selectedVehicle.make}
-                          </Text>
-                        )}
-                      </View>
-                      <Ionicons name="chevron-down" size={16} color="#6b7280" />
-                    </View>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Status</Text>
-                  <View style={styles.statusContainer}>
-                    {["pending", "confirmed", "completed", "cancelled"].map((status) => (
-                      <TouchableOpacity
-                        key={status}
-                        style={[
-                          styles.statusOption,
-                          editableBooking.status === status && styles.statusOptionSelected,
-                        ]}
-                        onPress={() => setEditableBooking(prev => ({...prev, status}))}
-                      >
-                        <Text
-                          style={
-                            editableBooking.status === status
-                              ? styles.statusOptionTextSelected
-                              : styles.statusOptionText
-                          }
-                        >
-                          {status.charAt(0).toUpperCase() + status.slice(1)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              </View>
-
-              {/* Delete Button */}
-              <View style={styles.section}>
-                <TouchableOpacity
-                  onPress={() => deleteBooking(editableBooking.id)}
-                  style={styles.deleteButton}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#ef4444" />
-                  <Text style={styles.deleteButtonText}>Delete Booking</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-
-            {/* Vehicle Picker Modal */}
-            <Modal
-              visible={vehiclePickerVisible}
-              transparent
-              animationType="fade"
-            >
-              <TouchableOpacity 
-                style={styles.modalOverlay}
-                activeOpacity={1}
-                onPress={() => setVehiclePickerVisible(false)}
-              >
-                <View style={styles.vehiclePickerContainer}>
-                  <View style={styles.pickerHeader}>
-                    <Text style={styles.pickerTitle}>Select Vehicle</Text>
-                    <TouchableOpacity onPress={() => setVehiclePickerVisible(false)}>
-                      <Ionicons name="close" size={24} color="#374151" />
-                    </TouchableOpacity>
-                  </View>
-                  <FlatList
-                    data={availableVehicles}
-                    keyExtractor={(item) => item.id.toString()}
-                    renderItem={({ item }) => (
-                      <TouchableOpacity
-                        onPress={() => {
-                          setEditableBooking(prev => ({
-                            ...prev, 
-                            vehicle_id: item.id,
-                            vehicles: {
-                              make: item.make,
-                              model: item.model,
-                              year: item.year
-                            }
-                          }));
-                          setVehiclePickerVisible(false);
-                        }}
-                        style={[
-                          styles.vehiclePickerItem,
-                          editableBooking.vehicle_id === item.id && styles.vehiclePickerItemSelected
-                        ]}
-                      >
-                        <View style={styles.vehiclePickerItemContent}>
-                          <Text style={styles.vehiclePickerText}>
-                            {item.year} {item.make} {item.model}
-                          </Text>
-                          <Text style={styles.vehiclePickerType}>{item.make}</Text>
-                        </View>
-                        {editableBooking.vehicle_id === item.id && (
-                          <Ionicons name="checkmark" size={18} color="#3b82f6" />
-                        )}
-                      </TouchableOpacity>
-                    )}
-                    ListEmptyComponent={
-                      <Text style={styles.emptyVehicleText}>No vehicles available</Text>
-                    }
-                  />
-                </View>
-              </TouchableOpacity>
-            </Modal>
-
-            {/* Date Picker Modal */}
-            {datePickerVisible && (
-              <Modal visible transparent animationType="fade">
-                <View style={styles.modalOverlay}>
-                  <View style={styles.calendarContainer}>
-                    <View style={styles.calendarHeader}>
-                      <Text style={styles.calendarTitle}>
-                        Select {dateField === "start" ? "Start" : "End"} Date
-                      </Text>
-                      <TouchableOpacity onPress={() => setDatePickerVisible(false)}>
-                        <Ionicons name="close" size={24} color="#374151" />
-                      </TouchableOpacity>
-                    </View>
-                    <Calendar
-                      onDayPress={(day) => {
-                        const field = dateField === "start" ? "rental_start_date" : "rental_end_date";
-                        setEditableBooking(prev => ({...prev, [field]: day.dateString}));
-                        setDatePickerVisible(false);
-                      }}
-                      markedDates={{
-                        [editableBooking.rental_start_date]: { selected: true, selectedColor: '#3b82f6' },
-                        [editableBooking.rental_end_date]: { selected: true, selectedColor: '#10b981' },
-                      }}
-                      theme={{
-                        selectedDayBackgroundColor: '#3b82f6',
-                        selectedDayTextColor: '#ffffff',
-                        todayTextColor: '#3b82f6',
-                        dayTextColor: '#1f2937',
-                        textDisabledColor: '#d1d5db',
-                        monthTextColor: '#1f2937',
-                        arrowColor: '#3b82f6',
-                      }}
-                    />
-                  </View>
-                </View>
-              </Modal>
-            )}
-          </SafeAreaView>
         </Animated.View>
       </Modal>
     );
   };
 
-  // Line Chart Component
-  const renderLineChart = () => {
-    if (chartData.length === 0) return null;
 
-    const maxBookings = Math.max(...chartData.map(d => d.bookings), 1);
-    const chartWidth = width - 64;
-    const chartHeight = 100;
-    const padding = 30;
-
-    const points = chartData.map((item, index) => {
-      const x = padding + (index / Math.max(chartData.length - 1, 1)) * (chartWidth - 2 * padding);
-      const y = padding + (1 - item.bookings / maxBookings) * (chartHeight - 2 * padding);
-      return { x, y, value: item.bookings };
-    });
-
-    const pathData = points.reduce((path, point, index) => {
-      const command = index === 0 ? 'M' : 'L';
-      return `${path} ${command} ${point.x} ${point.y}`;
-    }, '').trim();
-
-    const areaPath = pathData +
-      ` L ${points[points.length - 1].x} ${chartHeight - padding}` +
-      ` L ${points[0].x} ${chartHeight - padding} Z`;
-
-    return (
-      <View style={styles.chartContainer}>
-        <View style={styles.chartStats}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{chartData.reduce((sum, d) => sum + d.bookings, 0)}</Text>
-            <Text style={styles.statLabel}>Total Bookings</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>₱{chartData.reduce((sum, d) => sum + d.revenue, 0).toFixed(0)}</Text>
-            <Text style={styles.statLabel}>Total Revenue</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: getTrendColor() }]}>
-              {getTrendPercentage()}%
-            </Text>
-            <Text style={styles.statLabel}>Trend</Text>
-          </View>
-        </View>
-
-        <View style={styles.lineChartContainer}>
-          <Svg width={chartWidth} height={chartHeight + 30} style={styles.svgChart}>
-            <Defs>
-              <LinearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <Stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
-                <Stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
-              </LinearGradient>
-            </Defs>
-
-            {[0, 0.25, 0.5, 0.75, 1].map((ratio, index) => (
-              <Line
-                key={`grid-${index}`}
-                x1={padding}
-                y1={padding + ratio * (chartHeight - 2 * padding)}
-                x2={chartWidth - padding}
-                y2={padding + ratio * (chartHeight - 2 * padding)}
-                stroke="#f3f4f6"
-                strokeWidth="1"
-                opacity={0.5}
-              />
-            ))}
-
-            <Path
-              d={areaPath}
-              fill="url(#gradient)"
-              fillOpacity={0.1}
-            />
-
-            <Path
-              d={pathData}
-              stroke="#3b82f6"
-              strokeWidth="3"
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-
-            {points.map((point, index) => (
-              <Circle
-                key={index}
-                cx={point.x}
-                cy={point.y}
-                r="4"
-                fill="#3b82f6"
-                stroke="white"
-                strokeWidth="2"
-              />
-            ))}
-          </Svg>
-
-          <View style={styles.xAxisLabels}>
-            {chartData.map((item, index) => {
-              const shouldShow = chartData.length <= 7 || index % Math.ceil(chartData.length / 5) === 0;
-              return shouldShow ? (
-                <Text key={index} style={styles.axisLabel}>{item.period}</Text>
-              ) : null;
-            }).filter(Boolean)}
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  const getTrendColor = () => {
-    if (chartData.length < 2) return '#6b7280';
-    const recent = chartData.slice(-2);
-    return recent[1].bookings > recent[0].bookings ? '#10b981' : '#ef4444';
-  };
-
-  const getTrendPercentage = () => {
-    if (chartData.length < 2) return '0';
-    const recent = chartData.slice(-2);
-    if (recent[0].bookings === 0) return recent[1].bookings > 0 ? '+100' : '0';
-    const percentage = ((recent[1].bookings - recent[0].bookings) / recent[0].bookings) * 100;
-    return percentage > 0 ? `+${percentage.toFixed(1)}` : percentage.toFixed(1);
-  };
 
   const renderPagination = () => {
     if (totalPages <= 1) return null;
@@ -1795,7 +1354,7 @@ export default function BookingsScreen() {
         <View style={styles.headerActions}>
           <TouchableOpacity 
             style={styles.addButton} 
-            onPress={openAddBookingModal}
+            onPress={() => setAddModalVisible(true)}
           >
             <Ionicons name="add" size={24} color="white" />
           </TouchableOpacity>
@@ -1805,98 +1364,7 @@ export default function BookingsScreen() {
         </View>
       </View>
 
-      <View style={styles.summaryCard}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.sectionTitle}>Booking Overview</Text>
-        </View>
-        
-        {/* Enhanced Filter Controls */}
-        <View style={styles.overviewFilters}>
-          <View style={styles.overviewFilterRow}>
-            <TouchableOpacity 
-              onPress={() => setOverviewFilter('Today')} 
-              style={[
-                styles.overviewFilterButton,
-                overviewFilter === 'Today' && styles.overviewFilterButtonActive
-              ]}
-            >
-              <Text style={[
-                styles.overviewFilterButtonText,
-                overviewFilter === 'Today' && styles.overviewFilterButtonTextActive
-              ]}>
-                Today
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              onPress={() => setOverviewFilter('Weekly')} 
-              style={[
-                styles.overviewFilterButton,
-                overviewFilter === 'Weekly' && styles.overviewFilterButtonActive
-              ]}
-            >
-              <Text style={[
-                styles.overviewFilterButtonText,
-                overviewFilter === 'Weekly' && styles.overviewFilterButtonTextActive
-              ]}>
-                Weekly
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              onPress={() => setOverviewFilter('Monthly')} 
-              style={[
-                styles.overviewFilterButton,
-                overviewFilter === 'Monthly' && styles.overviewFilterButtonActive
-              ]}
-            >
-              <Text style={[
-                styles.overviewFilterButtonText,
-                overviewFilter === 'Monthly' && styles.overviewFilterButtonTextActive
-              ]}>
-                Monthly
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Secondary Filters with proper cascading */}
-          <View style={styles.secondaryFilterRow}>
-            <TouchableOpacity 
-              style={styles.secondaryFilterButton}
-              onPress={() => setYearDropdownVisible(true)}
-            >
-              <Text style={styles.secondaryFilterButtonText}>{selectedYear}</Text>
-              <Ionicons name="chevron-down" size={14} color="#6b7280" />
-            </TouchableOpacity>
-
-            {overviewFilter === 'Monthly' && (
-              <TouchableOpacity 
-                style={styles.secondaryFilterButton}
-                onPress={() => setMonthDropdownVisible(true)}
-              >
-                <Text style={styles.secondaryFilterButtonText}>
-                  {monthNames[selectedMonth]}
-                </Text>
-                <Ionicons name="chevron-down" size={14} color="#6b7280" />
-              </TouchableOpacity>
-            )}
-
-            {overviewFilter === 'Weekly' && (
-              <TouchableOpacity 
-                style={styles.secondaryFilterButton}
-                onPress={() => setWeekDropdownVisible(true)}
-              >
-                <Text style={styles.secondaryFilterButtonText}>
-                  {selectedWeekRange ? selectedWeekRange.label : `${monthNames[selectedMonth]} weeks`}
-                </Text>
-                <Ionicons name="chevron-down" size={14} color="#6b7280" />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {renderLineChart()}
-      </View>
+      
 
       <View style={styles.listHeaderCard}>
         <Text style={styles.sectionTitle}>All Bookings</Text>
@@ -1927,7 +1395,7 @@ export default function BookingsScreen() {
               onPress={() => setVehicleTypeDropdownVisible(true)}
             >
               <Text style={styles.dropdownButtonText}>
-                {vehicleTypeFilter === 'All' ? 'All Types' : vehicleTypeFilter}
+                {vehicleTypeFilter === 'All' ? 'All Vehicle Types' : vehicleTypeFilter}
               </Text>
               <Ionicons name="chevron-down" size={16} color="#6b7280" />
             </TouchableOpacity>
@@ -1962,6 +1430,14 @@ export default function BookingsScreen() {
               )}
             </>
           )}
+
+            {item.vehicle_variants && (
+              <Text style={styles.vehicleInfo}>
+                Color: {item.vehicle_variants.color} 
+                ({item.vehicle_variants.available_quantity}/{item.vehicle_variants.total_quantity})
+              </Text>
+            )}
+
         </View>
 
         <View style={styles.rightSection}>
@@ -2005,7 +1481,12 @@ export default function BookingsScreen() {
       <VehicleTypeDropdown />
       
       {/* Modals */}
-      <AddBookingModal />
+      <AddBookingModal
+        isVisible={addModalVisible}
+        onClose={() => setAddModalVisible(false)}
+        refreshBookings={fetchBookings}
+      />
+
       <EditBookingModal />
 
       {/* Main Content */}

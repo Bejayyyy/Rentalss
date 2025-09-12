@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import {
   View,
   Text,
@@ -12,22 +12,101 @@ import {
   RefreshControl,
   Platform,
   Dimensions,
+  Modal,
+  TextInput,
+  ScrollView,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { supabase } from '../services/supabase' // Adjust path as needed
+import { supabase } from '../services/supabase'
 
 const { width } = Dimensions.get("window")
 const isWeb = Platform.OS === "web"
 
 export default function VehiclesScreen({ navigation }) {
   const [vehicles, setVehicles] = useState([])
+  const [vehicleVariants, setVehicleVariants] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeFilter, setActiveFilter] = useState("all")
   const [bookings, setBookings] = useState([])
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false)
+  const [vehicleToDelete, setVehicleToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  
+  // New filter and search states
+  const [searchText, setSearchText] = useState("")
+  const [showFilters, setShowFilters] = useState(false)
+  const [selectedSeats, setSelectedSeats] = useState("all")
+  const [selectedType, setSelectedType] = useState("all")
+  const [priceRange, setPriceRange] = useState("all")
+
+  // Move getVehicleVariants function definition before it's used in useMemo
+  const getVehicleVariants = useCallback((vehicleId) => {
+    return vehicleVariants.filter(variant => variant.vehicle_id === vehicleId)
+  }, [vehicleVariants])
+
+  const filteredVehicles = useMemo(() => {
+    let filtered = vehicles;
+
+    switch (activeFilter) {
+      case "available":
+        filtered = filtered.filter(v =>
+          !bookings.some(b => b.vehicle_id === v.id && b.status === "confirmed")
+        );
+        break;
+      case "rented":
+        filtered = filtered.filter(v =>
+          bookings.some(b => b.vehicle_id === v.id && b.status === "confirmed")
+        );
+        break;
+      case "maintenance":
+        filtered = filtered.filter(v => v.status === "maintenance");
+        break;
+    }
+
+    if (selectedSeats !== "all") {
+      filtered = filtered.filter(v => v.seats?.toString() === selectedSeats);
+    }
+
+    if (selectedType !== "all") {
+      filtered = filtered.filter(v => v.type?.toLowerCase() === selectedType.toLowerCase());
+    }
+
+    if (priceRange !== "all") {
+      filtered = filtered.filter(v => {
+        const price = parseFloat(v.price_per_day || 0);
+        switch (priceRange) {
+          case "under-1000": return price < 1000;
+          case "1000-2000": return price >= 1000 && price <= 2000;
+          case "2000-5000": return price > 2000 && price <= 5000;
+          case "over-5000": return price > 5000;
+          default: return true;
+        }
+      });
+    }
+
+    if (searchText.trim() !== "") {
+      const search = searchText.toLowerCase().trim();
+      filtered = filtered.filter(vehicle => {
+        const variants = getVehicleVariants(vehicle.id);
+        const colors = variants.map(v => v.color).join(' ').toLowerCase();
+        return (
+          vehicle.make?.toLowerCase().includes(search) ||
+          vehicle.model?.toLowerCase().includes(search) ||
+          vehicle.year?.toString().includes(search) ||
+          vehicle.type?.toLowerCase().includes(search) ||
+          vehicle.price_per_day?.toString().includes(search) ||
+          colors.includes(search)
+        );
+      });
+    }
+
+    return filtered;
+  }, [vehicles, bookings, vehicleVariants, searchText, activeFilter, selectedSeats, selectedType, priceRange, getVehicleVariants]);
 
   useEffect(() => {
     fetchVehicles()
+    fetchVehicleVariants()
     fetchBookings()
 
     // Set up real-time subscriptions
@@ -42,6 +121,21 @@ export default function VehiclesScreen({ navigation }) {
         (payload) => {
           console.log('Vehicle change:', payload)
           fetchVehicles()
+        }
+      )
+      .subscribe()
+
+    const variantsSubscription = supabase
+      .channel('variants-channel')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'vehicle_variants' 
+        }, 
+        (payload) => {
+          console.log('Variant change:', payload)
+          fetchVehicleVariants()
         }
       )
       .subscribe()
@@ -63,6 +157,7 @@ export default function VehiclesScreen({ navigation }) {
 
     return () => {
       vehiclesSubscription.unsubscribe()
+      variantsSubscription.unsubscribe()
       bookingsSubscription.unsubscribe()
     }
   }, [])
@@ -89,6 +184,24 @@ export default function VehiclesScreen({ navigation }) {
     }
   }
 
+  const fetchVehicleVariants = async () => {
+    try {
+      const { data: variantsData, error } = await supabase
+        .from('vehicle_variants')
+        .select('*')
+        .order('color', { ascending: true })
+
+      if (error) {
+        console.error('Error fetching vehicle variants:', error)
+        return
+      }
+
+      setVehicleVariants(variantsData || [])
+    } catch (error) {
+      console.error('Error in fetchVehicleVariants:', error)
+    }
+  }
+
   const fetchBookings = async () => {
     try {
       const { data: bookingsData, error } = await supabase
@@ -109,26 +222,8 @@ export default function VehiclesScreen({ navigation }) {
 
   const refreshData = async () => {
     setLoading(true)
-    await Promise.all([fetchVehicles(), fetchBookings()])
+    await Promise.all([fetchVehicles(), fetchVehicleVariants(), fetchBookings()])
   }
-
-  const getFilteredVehicles = () => {
-    switch (activeFilter) {
-      case "available":
-        return vehicles.filter(v => 
-          !bookings.some(b => b.vehicle_id === v.id && b.status === "confirmed")
-        )
-      case "rented":
-        return vehicles.filter(v => 
-          bookings.some(b => b.vehicle_id === v.id && b.status === "confirmed")
-        )
-      case "maintenance":
-        return vehicles.filter(v => v.status === "maintenance")
-      default:
-        return vehicles
-    }
-  }
-  
 
   const getVehicleStats = () => {
     const totalBookings = bookings.length
@@ -145,148 +240,362 @@ export default function VehiclesScreen({ navigation }) {
     }
   }
 
-  const deleteVehicle = (vehicleId, vehicleName) => {
-    Alert.alert("Delete Vehicle", `Are you sure you want to delete ${vehicleName}?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            const { error } = await supabase
-              .from('vehicles')
-              .delete()
-              .eq('id', vehicleId)
-
-            if (error) {
-              console.error('Error deleting vehicle:', error)
-              Alert.alert("Error", "Failed to delete vehicle")
-              return
-            }
-
-            Alert.alert("Success", "Vehicle deleted successfully")
-            // Data will be updated automatically via real-time subscription
-          } catch (error) {
-            console.error('Error in deleteVehicle:', error)
-            Alert.alert("Error", "Failed to delete vehicle")
-          }
-        },
-      },
-    ])
+  // Get unique values for filter options
+  const getUniqueSeats = () => {
+    const seats = [...new Set(vehicles.map(v => v.seats).filter(Boolean))]
+    return seats.sort((a, b) => a - b)
   }
 
-  const renderVehicleItem = ({ item }) => (
-    <View style={styles.vehicleCard}>
-      <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: item.image_url || item.imageUrl || "https://via.placeholder.com/400x240?text=No+Image" }}
-          style={styles.vehicleImage}
-          resizeMode="cover"
-        />
-        <View style={styles.imageOverlay}>
-          <View style={[styles.statusBadge, { 
-            backgroundColor: item.available ? "#10b981" : "#ef4444",
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 3.84,
-            elevation: 5,
-          }]}>
-            <Ionicons 
-              name={item.available ? "checkmark-circle" : "time"} 
-              size={14} 
-              color="white" 
-            />
-            <Text style={styles.statusText}>
-              {item.available ? "Available" : "Rented"}
-            </Text>
+  const getUniqueTypes = () => {
+    const types = [...new Set(vehicles.map(v => v.type).filter(Boolean))]
+    return types.sort()
+  }
+
+  const clearAllFilters = () => {
+    setSearchText("")
+    setSelectedSeats("all")
+    setSelectedType("all")
+    setPriceRange("all")
+    setActiveFilter("all")
+  }
+
+  const showDeleteConfirmation = (vehicle) => {
+    setVehicleToDelete(vehicle)
+    setDeleteModalVisible(true)
+  }
+
+  const hideDeleteConfirmation = () => {
+    setDeleteModalVisible(false)
+    setVehicleToDelete(null)
+  }
+
+  const confirmDeleteVehicle = async () => {
+    if (!vehicleToDelete) return
+
+    setDeleting(true)
+    
+    try {
+      // Delete vehicle (variants will be deleted automatically due to cascade)
+      const { error } = await supabase
+        .from('vehicles')
+        .delete()
+        .eq('id', vehicleToDelete.id)
+
+      if (error) {
+        console.error('Error deleting vehicle:', error)
+        Alert.alert("Error", "Failed to delete vehicle")
+        return
+      }
+
+      Alert.alert("Success", "Vehicle deleted successfully")
+      hideDeleteConfirmation()
+      
+      // Data will be updated automatically via real-time subscription
+    } catch (error) {
+      console.error('Error in confirmDeleteVehicle:', error)
+      Alert.alert("Error", "Failed to delete vehicle")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const renderVehicleItem = ({ item }) => {
+    const variants = getVehicleVariants(item.id)
+    const totalVariantQuantity = variants.reduce((sum, variant) => sum + variant.total_quantity, 0)
+    const availableVariantQuantity = variants.reduce((sum, variant) => sum + variant.available_quantity, 0)
+
+    return (
+      <View style={styles.vehicleCard}>
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: item.image_url || "https://via.placeholder.com/400x240?text=No+Image" }}
+            style={styles.vehicleImage}
+            resizeMode="cover"
+          />
+          <View style={styles.imageOverlay}>
+            <View style={[styles.statusBadge, { 
+              backgroundColor: item.available ? "#10b981" : "#ef4444",
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.25,
+              shadowRadius: 3.84,
+              elevation: 5,
+            }]}>
+              <Ionicons 
+                name={item.available ? "checkmark-circle" : "time"} 
+                size={14} 
+                color="white" 
+              />
+              <Text style={styles.statusText}>
+                {item.available ? "Available" : "Rented"}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
 
-      <View style={styles.vehicleContent}>
-        <View style={styles.vehicleHeader}>
-          <View style={styles.vehicleInfo}>
-            <Text style={styles.vehicleName}>
-              {item.make} {item.model}
-            </Text>
-            <Text style={styles.vehicleYear}>{item.year} • {item.type}</Text>
-          </View>
-          <View style={styles.priceContainer}>
-            <Text style={styles.priceAmount}>₱{parseFloat(item.price_per_day || item.pricePerDay || 0).toLocaleString()}</Text>
-            <Text style={styles.priceLabel}>/day</Text>
-          </View>
-        </View>
-
-        <View style={styles.vehicleFeatures}>
-          <View style={styles.featureItem}>
-            <View style={styles.featureIcon}>
-              <Ionicons name="people" size={14} color="#6b7280" />
+        <View style={styles.vehicleContent}>
+          <View style={styles.vehicleHeader}>
+            <View style={styles.vehicleInfo}>
+              <Text style={styles.vehicleName}>
+                {item.make} {item.model}
+              </Text>
+              <Text style={styles.vehicleYear}>{item.year} • {item.type}</Text>
             </View>
-            <Text style={styles.featureText}>{item.seats} seats</Text>
-          </View>
-          
-          <View style={styles.featureItem}>
-            <View style={styles.featureIcon}>
-              <Ionicons name="speedometer" size={14} color="#6b7280" />
+            <View style={styles.priceContainer}>
+              <Text style={styles.priceAmount}>₱{parseFloat(item.price_per_day || 0).toLocaleString()}</Text>
+              <Text style={styles.priceLabel}>/day</Text>
             </View>
-            <Text style={styles.featureText}>
-              {item.mileage ? `${item.mileage.toLocaleString()} mi` : "N/A"}
-            </Text>
-          </View>
-          
-          <View style={styles.featureItem}>
-            <View style={styles.featureIcon}>
-              <Ionicons name="car" size={14} color="#6b7280" />
-            </View>
-            <Text style={styles.featureText}>{item.type}</Text>
           </View>
 
-          {item.license_plate && (
+          <View style={styles.vehicleFeatures}>
             <View style={styles.featureItem}>
               <View style={styles.featureIcon}>
-                <Ionicons name="document-text" size={14} color="#6b7280" />
+                <Ionicons name="people" size={14} color="#6b7280" />
               </View>
-              <Text style={styles.featureText}>{item.license_plate}</Text>
+              <Text style={styles.featureText}>{item.seats} seats</Text>
+            </View>
+            
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Ionicons name="speedometer" size={14} color="#6b7280" />
+              </View>
+              <Text style={styles.featureText}>
+                {item.mileage ? `${item.mileage.toLocaleString()} mi` : "N/A"}
+              </Text>
+            </View>
+            
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Ionicons name="car" size={14} color="#6b7280" />
+              </View>
+              <Text style={styles.featureText}>{item.type}</Text>
+            </View>
+
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Ionicons name="color-palette" size={14} color="#6b7280" />
+              </View>
+              <Text style={styles.featureText}>{variants.length} color{variants.length !== 1 ? 's' : ''}</Text>
+            </View>
+          </View>
+
+          {/* Color Variants Preview */}
+          {variants.length > 0 && (
+            <View style={styles.variantsPreview}>
+              <Text style={styles.variantsTitle}>Available Colors:</Text>
+              <View style={styles.variantsList}>
+                {variants.slice(0, 3).map((variant, index) => (
+                  <View key={variant.id} style={styles.variantChip}>
+                    <Text style={styles.variantColor}>{variant.color}</Text>
+                    <Text style={styles.variantQuantity}>({variant.available_quantity})</Text>
+                  </View>
+                ))}
+                {variants.length > 3 && (
+                  <Text style={styles.moreVariants}>+{variants.length - 3} more</Text>
+                )}
+              </View>
             </View>
           )}
-        </View>
 
-        {item.description && (
-          <Text style={styles.vehicleDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
-        )}
+          {item.description && (
+            <Text style={styles.vehicleDescription} numberOfLines={2}>
+              {item.description}
+            </Text>
+          )}
 
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => navigation.navigate("VehicleDetails", { vehicle: item })}
-          >
-            <Ionicons name="eye" size={16} color="white" />
-            <Text style={styles.primaryButtonText}>View Details</Text>
-          </TouchableOpacity>
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={[styles.secondaryButton, styles.flexButton]}
+              onPress={() => navigation.navigate("AddVehicle", { vehicle: item })}
+            >
+              <Ionicons name="create" size={16} color="black" />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => navigation.navigate("AddVehicle", { vehicle: item })}
-          >
-            <Ionicons name="create" size={16} color="#374151" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.dangerButton}
-            onPress={() => deleteVehicle(item.id, `${item.make} ${item.model}`)}
-          >
-            <Ionicons name="trash" size={16} color="#ef4444" />
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.dangerButton, styles.flexButton]}
+              onPress={() => showDeleteConfirmation(item)}
+            >
+              <Ionicons name="trash" size={16} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    </View>
+    )
+  }
+
+  const renderFiltersModal = () => (
+    <Modal
+      visible={showFilters}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowFilters(false)}
+    >
+      <View style={styles.filtersModalOverlay}>
+        <View style={styles.filtersModalContainer}>
+          <View style={styles.filtersHeader}>
+            <Text style={styles.filtersTitle}>Advanced Filters</Text>
+            <TouchableOpacity
+              style={styles.filtersCloseButton}
+              onPress={() => setShowFilters(false)}
+            >
+              <Ionicons name="close" size={24} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.filtersContent} showsVerticalScrollIndicator={false}>
+            {/* Seats Filter */}
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterGroupTitle}>Number of Seats</Text>
+              <View style={styles.filterOptions}>
+                <TouchableOpacity
+                  style={[styles.filterOption, selectedSeats === "all" && styles.filterOptionActive]}
+                  onPress={() => setSelectedSeats("all")}
+                >
+                  <Text style={[styles.filterOptionText, selectedSeats === "all" && styles.filterOptionTextActive]}>
+                    All Seats
+                  </Text>
+                </TouchableOpacity>
+                {getUniqueSeats().map(seats => (
+                  <TouchableOpacity
+                    key={seats}
+                    style={[styles.filterOption, selectedSeats === seats.toString() && styles.filterOptionActive]}
+                    onPress={() => setSelectedSeats(seats.toString())}
+                  >
+                    <Text style={[styles.filterOptionText, selectedSeats === seats.toString() && styles.filterOptionTextActive]}>
+                      {seats} seats
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Vehicle Type Filter */}
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterGroupTitle}>Vehicle Type</Text>
+              <View style={styles.filterOptions}>
+                <TouchableOpacity
+                  style={[styles.filterOption, selectedType === "all" && styles.filterOptionActive]}
+                  onPress={() => setSelectedType("all")}
+                >
+                  <Text style={[styles.filterOptionText, selectedType === "all" && styles.filterOptionTextActive]}>
+                    All Types
+                  </Text>
+                </TouchableOpacity>
+                {getUniqueTypes().map(type => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.filterOption, selectedType === type && styles.filterOptionActive]}
+                    onPress={() => setSelectedType(type)}
+                  >
+                    <Text style={[styles.filterOptionText, selectedType === type && styles.filterOptionTextActive]}>
+                      {type}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Price Range Filter */}
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterGroupTitle}>Price Range (per day)</Text>
+              <View style={styles.filterOptions}>
+                {[
+                  { key: "all", label: "All Prices" },
+                  { key: "under-1000", label: "Under ₱1,000" },
+                  { key: "1000-2000", label: "₱1,000 - ₱2,000" },
+                  { key: "2000-5000", label: "₱2,000 - ₱5,000" },
+                  { key: "over-5000", label: "Over ₱5,000" }
+                ].map(option => (
+                  <TouchableOpacity
+                    key={option.key}
+                    style={[styles.filterOption, priceRange === option.key && styles.filterOptionActive]}
+                    onPress={() => setPriceRange(option.key)}
+                  >
+                    <Text style={[styles.filterOptionText, priceRange === option.key && styles.filterOptionTextActive]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={styles.filtersActions}>
+            <TouchableOpacity
+              style={styles.filtersClearButton}
+              onPress={clearAllFilters}
+            >
+              <Text style={styles.filtersClearText}>Clear All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.filtersApplyButton}
+              onPress={() => setShowFilters(false)}
+            >
+              <Text style={styles.filtersApplyText}>Apply Filters</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+
+  const renderDeleteModal = () => (
+    <Modal
+      visible={deleteModalVisible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={hideDeleteConfirmation}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <View style={styles.modalIconContainer}>
+              <Ionicons name="warning" size={32} color="#ef4444" />
+            </View>
+            <Text style={styles.modalTitle}>Delete Vehicle</Text>
+            <Text style={styles.modalMessage}>
+              Are you sure you want to delete{' '}
+              <Text style={styles.modalVehicleName}>
+                {vehicleToDelete?.make} {vehicleToDelete?.model}
+              </Text>
+              ? This action cannot be undone and will also delete all associated color variants.
+            </Text>
+          </View>
+          
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={hideDeleteConfirmation}
+              disabled={deleting}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.modalDeleteButton, deleting && styles.modalButtonDisabled]}
+              onPress={confirmDeleteVehicle}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <Text style={styles.modalDeleteText}>Deleting...</Text>
+              ) : (
+                <>
+                  <Ionicons name="trash" size={16} color="white" />
+                  <Text style={styles.modalDeleteText}>Delete</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   )
 
   const renderHeader = () => {
     const stats = getVehicleStats()
+    const activeFiltersCount = [searchText, selectedSeats, selectedType, priceRange].filter(
+      f => f && f !== "all"
+    ).length
     
     return (
       <>
@@ -294,7 +603,7 @@ export default function VehiclesScreen({ navigation }) {
         <View style={styles.headerContainer}>
           <View style={styles.header}>
             <View style={styles.headerContent}>
-              <Text style={styles.headerTitle}>Vehicle Fleet</Text>
+              <Text style={styles.headerTitle}>Vehicle</Text>
               <Text style={styles.headerSubtitle}>
                 Manage your rental vehicles
               </Text>
@@ -326,13 +635,13 @@ export default function VehiclesScreen({ navigation }) {
             
             <View style={styles.statCard}>
               <View style={styles.statIconContainer}>
-                <Ionicons name="calendar" size={24} color="#222" />
+                <Ionicons name="color-palette" size={24} color="#222" />
               </View>
-              <Text style={styles.statValue}>{stats.totalBookings}</Text>
-              <Text style={styles.statLabel}>Total Bookings</Text>
+              <Text style={styles.statValue}>{vehicleVariants.length}</Text>
+              <Text style={styles.statLabel}>Color Variants</Text>
               <View style={styles.statTrend}>
-                <Ionicons name="trending-up" size={12} color="#10b981" />
-                <Text style={styles.statTrendText}>All time</Text>
+                <Ionicons name="options" size={12} color="#8b5cf6" />
+                <Text style={[styles.statTrendText, { color: "#8b5cf6" }]}>Total options</Text>
               </View>
             </View>
           </View>
@@ -352,24 +661,67 @@ export default function VehiclesScreen({ navigation }) {
 
             <View style={styles.statCard}>
               <View style={styles.statIconContainer}>
-                <Ionicons name="cash" size={24} color="#222" />
+                <Ionicons name="analytics" size={24} color="#222" />
               </View>
-              <Text style={styles.statValue}>₱{stats.totalRevenue.toLocaleString()}</Text>
-              <Text style={styles.statLabel}>Total Revenue</Text>
+              <Text style={styles.statValue}>{stats.totalBookings}</Text>
+              <Text style={styles.statLabel}>Total Bookings</Text>
               <View style={styles.statTrend}>
-                <Ionicons name="trending-up" size={12} color="#10b981" />
-                <Text style={styles.statTrendText}>All completed</Text>
+                <Ionicons name="bar-chart" size={12} color="#f59e0b" />
+                <Text style={[styles.statTrendText, { color: "#f59e0b" }]}>All time</Text>
               </View>
             </View>
+          </View>
+        </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchSection}>
+          <View style={styles.searchContainer}>
+            <View style={styles.searchInputContainer}>
+              <Ionicons name="search" size={20} color="#6b7280" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search vehicles..."
+                value={searchText}
+                onChangeText={setSearchText}
+                placeholderTextColor="#9ca3af"
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+
+              {searchText.length > 0 && (
+                <TouchableOpacity
+                  style={styles.searchClearButton}
+                  onPress={() => setSearchText("")}
+                >
+                  <Ionicons name="close-circle" size={20} color="#6b7280" />
+                </TouchableOpacity>
+              )}
+            </View>
+            
+            <TouchableOpacity
+              style={[styles.filtersButton, activeFiltersCount > 0 && styles.filtersButtonActive]}
+              onPress={() => setShowFilters(true)}
+            >
+              <Ionicons 
+                name="options" 
+                size={20} 
+                color={activeFiltersCount > 0 ? "white" : "#6b7280"} 
+              />
+              {activeFiltersCount > 0 && (
+                <View style={styles.filtersBadge}>
+                  <Text style={styles.filtersBadgeText}>{activeFiltersCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* Enhanced Filter Section */}
         <View style={styles.filterSection}>
           <View style={styles.filterHeader}>
-            <Text style={styles.sectionTitle}>Fleet Overview</Text>
+            <Text style={styles.sectionTitle}>Vehicle Overview</Text>
             <Text style={styles.sectionSubtitle}>
-              {getFilteredVehicles().length} vehicles
+              {filteredVehicles.length} vehicles
             </Text>
           </View>
           
@@ -408,6 +760,61 @@ export default function VehiclesScreen({ navigation }) {
             ))}
           </View>
         </View>
+
+        {/* Active Filters Display */}
+        {(searchText || selectedSeats !== "all" || selectedType !== "all" || priceRange !== "all") && (
+          <View style={styles.activeFiltersSection}>
+            <View style={styles.activeFiltersHeader}>
+              <Text style={styles.activeFiltersTitle}>Active Filters</Text>
+              <TouchableOpacity
+                style={styles.clearFiltersButton}
+                onPress={clearAllFilters}
+              >
+                <Text style={styles.clearFiltersText}>Clear All</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.activeFiltersList}>
+              {searchText && (
+                <View style={styles.activeFilter}>
+                  <Text style={styles.activeFilterText}>Search: "{searchText}"</Text>
+                  <TouchableOpacity onPress={() => setSearchText("")}>
+                    <Ionicons name="close" size={16} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
+              )}
+              {selectedSeats !== "all" && (
+                <View style={styles.activeFilter}>
+                  <Text style={styles.activeFilterText}>{selectedSeats} seats</Text>
+                  <TouchableOpacity onPress={() => setSelectedSeats("all")}>
+                    <Ionicons name="close" size={16} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
+              )}
+              {selectedType !== "all" && (
+                <View style={styles.activeFilter}>
+                  <Text style={styles.activeFilterText}>{selectedType}</Text>
+                  <TouchableOpacity onPress={() => setSelectedType("all")}>
+                    <Ionicons name="close" size={16} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
+              )}
+              {priceRange !== "all" && (
+                <View style={styles.activeFilter}>
+                  <Text style={styles.activeFilterText}>
+                    {priceRange === "under-1000" && "Under ₱1,000"}
+                    {priceRange === "1000-2000" && "₱1,000-₱2,000"}
+                    {priceRange === "2000-5000" && "₱2,000-₱5,000"}
+                    {priceRange === "over-5000" && "Over ₱5,000"}
+                  </Text>
+                  <TouchableOpacity onPress={() => setPriceRange("all")}>
+                    <Ionicons name="close" size={16} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
       </>
     )
   }
@@ -418,15 +825,26 @@ export default function VehiclesScreen({ navigation }) {
         <Ionicons name="car-outline" size={64} color="#d1d5db" />
       </View>
       <Text style={styles.emptyStateTitle}>
-        {activeFilter === "all" ? "No vehicles yet" : `No ${activeFilter} vehicles`}
-      </Text>
-      <Text style={styles.emptyStateDescription}>
-        {activeFilter === "all" 
-          ? "Add your first vehicle to get started with your rental business"
-          : `You don't have any ${activeFilter} vehicles at the moment`
+        {activeFilter === "all" && !searchText && selectedSeats === "all" && selectedType === "all" && priceRange === "all" 
+          ? "No vehicles yet" 
+          : "No vehicles found"
         }
       </Text>
-      {activeFilter === "all" && (
+      <Text style={styles.emptyStateDescription}>
+        {activeFilter === "all" && !searchText && selectedSeats === "all" && selectedType === "all" && priceRange === "all"
+          ? "Add your first vehicle to get started with your rental business"
+          : "Try adjusting your search or filters to find what you're looking for"
+        }
+      </Text>
+      {(searchText || selectedSeats !== "all" || selectedType !== "all" || priceRange !== "all") ? (
+        <TouchableOpacity
+          style={styles.emptyStateButton}
+          onPress={clearAllFilters}
+        >
+          <Ionicons name="refresh" size={18} color="white" />
+          <Text style={styles.emptyStateButtonText}>Clear Filters</Text>
+        </TouchableOpacity>
+      ) : activeFilter === "all" && (
         <TouchableOpacity
           style={styles.emptyStateButton}
           onPress={() => navigation.navigate("AddVehicle")}
@@ -441,7 +859,7 @@ export default function VehiclesScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
-        data={getFilteredVehicles()}
+        data={filteredVehicles}
         renderItem={renderVehicleItem}
         keyExtractor={(item) => item.id.toString()}
         ListHeaderComponent={renderHeader}
@@ -459,6 +877,9 @@ export default function VehiclesScreen({ navigation }) {
         ListEmptyComponent={!loading ? renderEmptyState : null}
         ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
       />
+      
+      {renderDeleteModal()}
+      {renderFiltersModal()}
     </SafeAreaView>
   )
 }
@@ -573,9 +994,81 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginLeft: 4,
   },
+  // Search Section Styles
+  searchSection: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+  },
+  searchContainer: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "white",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#111827",
+    fontWeight: "500",
+  },
+  searchClearButton: {
+    marginLeft: 8,
+  },
+  filtersButton: {
+    width: 48,
+    height: 48,
+    backgroundColor: "white",
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    position: "relative",
+  },
+  filtersButtonActive: {
+    backgroundColor: "#222",
+  },
+  filtersBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: "#ef4444",
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  filtersBadgeText: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "600",
+  },
   filterSection: {
     paddingHorizontal: 20,
-    paddingTop: 32,
+    paddingTop: 24,
     paddingBottom: 24,
   },
   filterHeader: {
@@ -643,6 +1136,153 @@ const styles = StyleSheet.create({
     color: "#6b7280",
   },
   activeFilterCountText: {
+    color: "white",
+  },
+  // Active Filters Section
+  activeFiltersSection: {
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+  },
+  activeFiltersHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  activeFiltersTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  clearFiltersButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#f3f4f6",
+    borderRadius: 8,
+  },
+  clearFiltersText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  activeFiltersList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  activeFilter: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#e0f2fe",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  activeFilterText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#0369a1",
+  },
+  // Filters Modal Styles
+  filtersModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  filtersModalContainer: {
+    backgroundColor: "white",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "80%",
+    paddingBottom: 20,
+  },
+  filtersHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  filtersTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  filtersCloseButton: {
+    padding: 4,
+  },
+  filtersContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  filterGroup: {
+    marginBottom: 32,
+  },
+  filterGroupTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 16,
+  },
+  filterOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  filterOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: "#f3f4f6",
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  filterOptionActive: {
+    backgroundColor: "#222",
+    borderColor: "#222",
+  },
+  filterOptionText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#6b7280",
+  },
+  filterOptionTextActive: {
+    color: "white",
+  },
+  filtersActions: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  filtersClearButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#f3f4f6",
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  filtersClearText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  filtersApplyButton: {
+    flex: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#222",
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  filtersApplyText: {
+    fontSize: 14,
+    fontWeight: "600",
     color: "white",
   },
   listContainer: {
@@ -750,6 +1390,44 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     fontWeight: "500",
   },
+  variantsPreview: {
+    marginBottom: 16,
+  },
+  variantsTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
+  },
+  variantsList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  variantChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  variantColor: {
+    fontSize: 12,
+    color: "#374151",
+    fontWeight: "500",
+  },
+  variantQuantity: {
+    fontSize: 11,
+    color: "#6b7280",
+    marginLeft: 4,
+  },
+  moreVariants: {
+    fontSize: 12,
+    color: "#6b7280",
+    fontStyle: "italic",
+    alignSelf: "center",
+  },
   vehicleDescription: {
     fontSize: 14,
     color: "#6b7280",
@@ -780,18 +1458,17 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   secondaryButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
     backgroundColor: "#f3f4f6",
-    justifyContent: "center",
-    alignItems: "center",
   },
   dangerButton: {
-    width: 44,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ef4444",
+  },
+  flexButton: {
+    flex: 1,
     height: 44,
     borderRadius: 10,
-    backgroundColor: "#fef2f2",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -844,5 +1521,91 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     marginLeft: 8,
+  },
+  // Delete Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  modalContainer: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 24,
+    width: "100%",
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  modalHeader: {
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  modalIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#fef2f2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  modalVehicleName: {
+    fontWeight: "600",
+    color: "#111827",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: "#f3f4f6",
+    alignItems: "center",
+  },
+  modalCancelText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  modalDeleteButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: "#ef4444",
+    gap: 6,
+  },
+  modalButtonDisabled: {
+    opacity: 0.6,
+  },
+  modalDeleteText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "white",
   },
 })

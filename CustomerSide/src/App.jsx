@@ -1,41 +1,43 @@
-"use client"
 
 import { useState, useEffect, useRef } from "react"
-import { ChevronDown, ChevronUp } from "lucide-react"
-import { Car, Users, Gauge, Menu, X, Calendar, HeadphonesIcon, CheckCircle, AlertCircle } from "lucide-react"
-
+import { ChevronDown, ChevronUp, X, CheckCircle, AlertCircle, Menu,ChevronLeft,ChevronRight,Calendar,User,Clock,CreditCard,Upload} from "lucide-react"
+import { Car, Users, Gauge } from "lucide-react"
+import { MapPin, Phone, Mail } from "lucide-react"
 import { supabase } from "./lib/supabase"
 import HeroPageCar2 from "./assets/HeroPage/car2.png"
 import logo from "./assets/logo/logoRental.png"
 import aboutcra from "./assets/aboutuscar.png"
-import howitworks from "./assets/howitworks.jpg"
-
-
+import aboutcircle from "./assets/circleBg.jpg"
+import carImage from "./assets/Cars.png"
+import carIcon from "./assets/iconscar.png"
+import calendarIcon from "./assets/iconscalendar.png"
+import supportIcon from "./assets/iconssupport.png"
 import BackgroundImage from "./assets/HeroPage/section_bg2.png"
+import bgContact from "./assets/ContactUs.jpg"
+import defaultBackground from "./assets/CarScreen/background.jpg"
 
-// Success/Error Toast Component
+/* ===========================
+   ✅ Success/Error Toast
+   =========================== */
 const Toast = ({ type, message, isVisible, onClose }) => {
   useEffect(() => {
-    if (isVisible) {
-      const timer = setTimeout(() => {
-        onClose()
-      }, 5000)
-      return () => clearTimeout(timer)
-    }
+    if (!isVisible) return
+    const t = setTimeout(onClose, 5000)
+    return () => clearTimeout(t)
   }, [isVisible, onClose])
 
   if (!isVisible) return null
 
   return (
-    <div className="fixed top-4 right-4 z-60 animate-slide-in">
-      <div className={`flex items-center p-4 rounded-lg shadow-lg ${
-        type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 
-        'bg-red-100 text-red-800 border border-red-200'
-      }`}>
-        {type === 'success' ? 
-          <CheckCircle className="h-5 w-5 mr-3" /> : 
-          <AlertCircle className="h-5 w-5 mr-3" />
-        }
+    <div className="fixed top-4 right-4 z-[9999] animate-slide-in">
+      <div
+        className={`flex items-center p-4 rounded-lg shadow-lg ${
+          type === "success"
+            ? "bg-green-100 text-green-800 border border-green-200"
+            : "bg-red-100 text-red-800 border border-red-200"
+        }`}
+      >
+        {type === "success" ? <CheckCircle className="h-5 w-5 mr-3" /> : <AlertCircle className="h-5 w-5 mr-3" />}
         <span className="text-sm font-medium">{message}</span>
         <button onClick={onClose} className="ml-4 text-gray-400 hover:text-gray-600">
           <X className="h-4 w-4" />
@@ -44,420 +46,742 @@ const Toast = ({ type, message, isVisible, onClose }) => {
     </div>
   )
 }
-
-
-// Rental Modal Component
-const RentalModal = ({ isOpen, onClose, selectedCar }) => {
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    pickupDate: "",
-    returnDate: "",
-    pickupLocation: "",
-    licenseNumber: "",
-  })
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [totalPrice, setTotalPrice] = useState(0)
-  const [rentalDays, setRentalDays] = useState(0)
-  const [toast, setToast] = useState({ type: '', message: '', isVisible: false })
-
-   // ✅ Prevent background scroll when modal is open
-   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden"
-    } else {
-      document.body.style.overflow = "auto"
-    }
-    return () => {
-      document.body.style.overflow = "auto"
-    }
-  }, [isOpen])
-
-  // Calculate total price when dates change
-  useEffect(() => {
-    if (formData.pickupDate && formData.returnDate && selectedCar) {
-      const startDate = new Date(formData.pickupDate)
-      const endDate = new Date(formData.returnDate)
-      const timeDiff = endDate.getTime() - startDate.getTime()
-      const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24))
+/* ===========================
+   Details Modal
+   =========================== */
+   const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
+    const [variants, setVariants] = useState([]);
+    const [selectedVariant, setSelectedVariant] = useState(null);
+    const isRentButtonDisabled = !selectedVariant || Number(selectedVariant.available_quantity) === 0;
+    useEffect(() => {
+      const fetchVariants = async () => {
+        if (!car?.id) return;
+        const { data, error } = await supabase
+          .from("vehicle_variants")
+          .select("*")
+          .eq("vehicle_id", car.id);
+        if (!error) {
+          setVariants(data || []);
+          if (data && data.length > 0) {
+            setSelectedVariant(data[0]);
+          }
+        }
+      };
+      if (isOpen) fetchVariants();
+    }, [isOpen, car]);
+  
+    if (!isOpen || !car) return null;
+  
+    const renderColorSwatch = (variant) => {
+      const colorName = variant.color.toLowerCase();
+      let bgColor = '#e5e7eb';
       
-      if (daysDiff > 0) {
-        setRentalDays(daysDiff)
-        setTotalPrice(daysDiff * selectedCar.price_per_day)
-      } else {
-        setRentalDays(0)
-        setTotalPrice(0)
-      }
-    }
-  }, [formData.pickupDate, formData.returnDate, selectedCar])
-
-  const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
-  }
-
-  const showToast = (type, message) => {
-    setToast({ type, message, isVisible: true })
-  }
-
-  const hideToast = () => {
-    setToast({ ...toast, isVisible: false })
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setIsSubmitting(true)
-
-    try {
-      // Validate dates
-      const startDate = new Date(formData.pickupDate)
-      const endDate = new Date(formData.returnDate)
-      
-      if (endDate <= startDate) {
-        showToast('error', 'Return date must be after pickup date')
-        setIsSubmitting(false)
-        return
-      }
-
-      // Check if dates are in the future
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      if (startDate < today) {
-        showToast('error', 'Pickup date must be today or in the future')
-        setIsSubmitting(false)
-        return
-      }
-
-      // Check vehicle availability for the selected dates
-      const { data: existingBookings, error: bookingError } = await supabase
-  .from('bookings')
-  .select('*')
-  .eq('vehicle_id', selectedCar.id)
-  .eq('status', 'confirmed')
-  .lte('rental_start_date', formData.returnDate) // booking starts before return
-  .gte('rental_end_date', formData.pickupDate)   // booking ends after pickup
-
-      if (bookingError) throw bookingError
-
-      if (existingBookings && existingBookings.length >= selectedCar.available_quantity) {
-        showToast('error', 'Vehicle is not available for the selected dates')
-        setIsSubmitting(false)
-        return
-      }
-      
-
-      // Create booking
-      const bookingData = {
-        vehicle_id: selectedCar.id,
-        customer_name: formData.fullName,
-        customer_email: formData.email,
-        customer_phone: formData.phone,
-        rental_start_date: formData.pickupDate,
-        rental_end_date: formData.returnDate,
-        pickup_location: formData.pickupLocation,
-        license_number: formData.licenseNumber,
-        total_price: totalPrice,
-        status: 'pending'
-      }
-
-      const { data, error } = await supabase
-        .from('bookings')
-        .insert([bookingData])
-        .select()
-
-      if (error) throw error
-
-      showToast('success', 'Booking submitted successfully! We will contact you shortly to confirm your reservation.')
-      
-      // Reset form
-      setFormData({
-        fullName: "",
-        email: "",
-        phone: "",
-        pickupDate: "",
-        returnDate: "",
-        pickupLocation: "",
-        licenseNumber: "",
-      })
-      
-      setTimeout(() => {
-        onClose()
-      }, 2000)
-
-    } catch (error) {
-      console.error('Booking error:', error)
-      showToast('error', 'Failed to submit booking. Please try again.')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  if (!isOpen) return null
-
-  return (
-    <>
-
-    
-      <Toast 
-        type={toast.type}
-        message={toast.message}
-        isVisible={toast.isVisible}
-        onClose={hideToast}
-      />
-      
-      
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center">
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-          {/* Modal Header */}
-          <div className="flex items-center justify-between p-6 border-b">
-            <h2 className="text-2xl font-bold text-gray-900">Rent Your Car</h2>
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-              <X className="h-6 w-6" />
-            </button>
-          </div>
-          
-
-          {/* Selected Car Info */}
-          {selectedCar && (
-            <div className="p-6 bg-gray-50 border-b">
-              <div className="flex items-center space-x-4">
-                <img
-                  src={selectedCar.image_url || selectedCar.image}
-                  alt={`${selectedCar.make} ${selectedCar.model}`}
-                  className="w-20 h-16 object-cover rounded-lg"
-                />
-                <div className="flex-1">
-                  <h3 className="text-xl font-semibold text-gray-900">
-                    {selectedCar.make} {selectedCar.model}
-                  </h3>
-                  <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
-                    <span>{selectedCar.year}</span>
-                    <span>•</span>
-                    <span>{selectedCar.seats} seats</span>
-                    <span>•</span>
-                    <span>{selectedCar.type}</span>
-                  </div>
-                  <div className="text-lg font-bold text-green-600 mt-2">₱{selectedCar.price_per_day}/day</div>
+      if (colorName.includes('white') || colorName.includes('pearl')) bgColor = '#ffffff';
+      else if (colorName.includes('black') || colorName.includes('midnight')) bgColor = '#1f2937';
+      else if (colorName.includes('silver') || colorName.includes('metallic')) bgColor = '#9ca3af';
+      else if (colorName.includes('red')) bgColor = '#dc2626';
+      else if (colorName.includes('blue')) bgColor = '#2563eb';
+      else if (colorName.includes('gray') || colorName.includes('grey')) bgColor = '#6b7280';
+  
+      return (
+        <button
+          key={variant.id}
+          onClick={() => setSelectedVariant(variant)}
+          className={`w-12 h-12 rounded-full border-3 transition-all duration-200 hover:scale-110 ${
+            selectedVariant?.id === variant.id 
+              ? 'ring-4 ring-black ring-opacity-30 shadow-lg' 
+              : 'border-gray-300 hover:border-gray-400'
+          }`}
+          style={{ 
+            backgroundColor: bgColor,
+            border: bgColor === '#ffffff' ? '3px solid #e5e7eb' : '3px solid transparent'
+          }}
+          title={variant.color}
+        />
+      );
+    };
+  
+    return (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+        <div className="bg-white rounded-3xl max-w-7xl w-full h-[90vh] overflow-hidden shadow-2xl">
+          <div className="flex h-full">
+            {/* LEFT SIDE - Image and Navigation */}
+            <div className="w-3/5 bg-gradient-to-br from-gray-900 via-gray-800 to-black relative overflow-hidden">
+              {/* Close Button */}
+              <button 
+                onClick={onClose}
+                className="absolute top-6 right-6 z-10 w-10 h-10 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all duration-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+  
+              {/* Car Image */}
+              <div className="h-full flex items-center justify-center p-8">
+                <div className="relative w-full h-full max-w-4xl max-h-96">
+                  <img
+                    src={selectedVariant?.image_url || car.image_url || defaultBackground}
+                    alt={`${car.make} ${car.model}`}
+                    className="w-full h-full object-contain drop-shadow-2xl"
+                  />
                 </div>
               </div>
-              
-              {/* Price Calculation */}
-              {rentalDays > 0 && (
-                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                  <div className="flex justify-between items-center text-sm">
-                    <span>Rental Period:</span>
-                    <span className="font-semibold">{rentalDays} day{rentalDays > 1 ? 's' : ''}</span>
+  
+              {/* Navigation Arrows */}
+              <button className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all duration-200">
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <button className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all duration-200">
+                <ChevronRight className="w-6 h-6" />
+              </button>
+  
+              {/* Color Variants */}
+              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4">
+                {variants.map(renderColorSwatch)}
+              </div>
+            </div>
+  
+            {/* RIGHT SIDE - Car Details */}
+            <div className="w-2/5 p-8 flex flex-col">
+              {/* Header */}
+              <div className="mb-8">
+                <div className="flex items-center gap-4 mb-4">
+                  <h1 className="text-4xl font-bold text-gray-900">
+                    {car.make}
+                  </h1>
+                  <div className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-600">
+                    {car.year}
                   </div>
-                  <div className="flex justify-between items-center text-sm mt-1">
-                    <span>Daily Rate:</span>
-                    <span>₱{selectedCar.price_per_day}</span>
+                </div>
+                <h2 className="text-2xl font-light text-gray-700 mb-4">{car.model}</h2>
+                
+                {/* Specs */}
+                <div className="flex items-center gap-6 mb-6">
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Gauge className="w-5 h-5" />
+                    <span className="text-lg font-medium">2393 CC</span>
                   </div>
-                  <hr className="my-2" />
-                  <div className="flex justify-between items-center text-lg font-bold">
-                    <span>Total Price:</span>
-                    <span className="text-green-600">₱{totalPrice.toLocaleString()}</span>
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Users className="w-5 h-5" />
+                    <span className="text-lg font-medium">{car.seats} Seater</span>
+                  </div>
+                </div>
+  
+                {/* Price */}
+                <div className="text-3xl font-bold text-gray-900 mb-2">
+                  ₱{car.price_per_day?.toLocaleString()}<span className="text-lg font-normal text-gray-500">/day</span>
+                </div>
+              </div>
+  
+              {/* Description */}
+              <div className="flex-1 mb-8">
+                <p className="text-gray-600 leading-relaxed">
+                  {car.description || "Experience luxury and performance with this premium vehicle. Perfect for business trips, special occasions, or when you simply want to enjoy the finest driving experience."}
+                </p>
+              </div>
+  
+              {/* Selected Variant Info */}
+              {selectedVariant && (
+                <div className="mb-8 p-4 bg-gray-50 rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm text-gray-500 mb-1">Selected Color</div>
+                      <div className="font-semibold text-gray-900">{selectedVariant.color}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm text-gray-500 mb-1">Available</div>
+                      <div className="font-semibold text-gray-900">{selectedVariant.available_quantity} units</div>
+                    </div>
                   </div>
                 </div>
               )}
-            </div>
-          )}
-          
-
-          {/* Rental Form */}
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            {/* Personal Information */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
-                  <input
-                    type="text"
-                    name="fullName"
-                    value={formData.fullName}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter your full name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter your email"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number *</label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter your phone number"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">License Number *</label>
-                  <input
-                    type="text"
-                    name="licenseNumber"
-                    value={formData.licenseNumber}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter your driving license number"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Rental Details */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Rental Details</h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Pickup Date *</label>
-                  <input
-                    type="date"
-                    name="pickupDate"
-                    value={formData.pickupDate}
-                    onChange={handleInputChange}
-                    required
-                    min={new Date().toISOString().split("T")[0]}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Return Date *</label>
-                  <input
-                    type="date"
-                    name="returnDate"
-                    value={formData.returnDate}
-                    onChange={handleInputChange}
-                    required
-                    min={formData.pickupDate || new Date().toISOString().split("T")[0]}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Pickup Location *
-                </label>
-                <input
-                  type="text"
-                  name="pickupLocation"
-                  value={formData.pickupLocation}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg 
-                            focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter your preferred pickup location"
-                />
-              </div>
-
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex space-x-4 pt-6 border-t">
+  
+              {/* Rent Now Button */}
               <button
-                type="button"
-                onClick={onClose}
-                disabled={isSubmitting}
-                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                onClick={() => {
+                  onClose();
+                  onRentClick(car, selectedVariant);
+                }}
+                disabled={isRentButtonDisabled}
+                className={`w-full py-4 rounded-2xl text-lg font-semibold shadow-lg transition-colors duration-200 ${
+                  isRentButtonDisabled 
+                    ? 'bg-gray-400 cursor-not-allowed' 
+                    : 'bg-black text-white hover:bg-gray-800 hover:shadow-xl'
+                }`}
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting || rentalDays === 0}
-                className="flex-1 px-6 py-3 bg-black text-white rounded-lg font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? 'Submitting...' : `Submit Rental Request${totalPrice > 0 ? ` (₱${totalPrice.toLocaleString()})` : ''}`}
+                {isRentButtonDisabled ? 'Fully Booked' : 'Rent Now'}
               </button>
             </div>
-          </form>
+          </div>
         </div>
       </div>
-    </>
-  )
-}
+    );
+  };
+/* =========================================================
+   ✅ Rental Modal with Variants + Availability + Gov ID 🆕
+   ========================================================= */
+/* === Replace existing RentalModal with this === */
+/* =========================================================
+   ✅ Improved Rental Modal with Enhanced UI
+   ========================================================= */
+   const RentalModal = ({ isOpen, onClose, selectedCar, refreshBookings }) => {
+    const [formData, setFormData] = useState({
+      fullName: "",
+      email: "",
+      phone: "",
+      pickupDate: "",
+      returnDate: "",
+      pickupLocation: "",
+      licenseNumber: "",
+      vehicleVariantId: "",
+    });
+    const [variants, setVariants] = useState([]);
+    const [selectedVariant, setSelectedVariant] = useState(null);
+    const [govIdFile, setGovIdFile] = useState(null);
+    const [govIdPreview, setGovIdPreview] = useState(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [totalPrice, setTotalPrice] = useState(0);
+    const [rentalDays, setRentalDays] = useState(0);
+    const [toast, setToast] = useState({ type: "", message: "", isVisible: false });
+    const [variantsLoading, setVariantsLoading] = useState(false);
+  
+    const defaultBackground = 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800&h=600&fit=crop';
+  
+    useEffect(() => {
+      document.body.style.overflow = isOpen ? "hidden" : "auto";
+      return () => (document.body.style.overflow = "auto");
+    }, [isOpen]);
+  
+    // 🆕 Define the refreshVariants function
+    const refreshVariants = async () => {
+      if (!selectedCar?.id) return;
+      setVariantsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("vehicle_variants")
+          .select("*")
+          .eq("vehicle_id", selectedCar.id);
+  
+        if (!error && data) {
+          setVariants(data);
+        } else {
+          const mockVariants = [
+            { id: 1, color: 'Pearl White', image_url: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800&h=600&fit=crop', available_quantity: 3 },
+            { id: 2, color: 'Midnight Black', image_url: 'https://images.unsplash.com/photo-1549924231-f129b911e442?w=800&h=600&fit=crop', available_quantity: 2 },
+            { id: 3, color: 'Silver Metallic', image_url: 'https://images.unsplash.com/photo-1502877338535-766e1452684a?w=800&h=600&fit=crop', available_quantity: 0 },
+          ];
+          setVariants(mockVariants);
+        }
+      } catch (err) {
+        console.error('Error fetching variants:', err);
+        setVariants([]);
+      } finally {
+        setVariantsLoading(false);
+      }
+    };
+  
+    useEffect(() => {
+      if (isOpen) refreshVariants();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, selectedCar]);
+  
+    useEffect(() => {
+      if (formData.pickupDate && formData.returnDate && selectedCar) {
+        const start = new Date(formData.pickupDate);
+        const end = new Date(formData.returnDate);
+        const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24));
+        if (diffDays > 0) {
+          setRentalDays(diffDays);
+          setTotalPrice(diffDays * (selectedCar.price_per_day || 3500));
+        } else {
+          setRentalDays(0);
+          setTotalPrice(0);
+        }
+      } else {
+        setRentalDays(0);
+        setTotalPrice(0);
+      }
+    }, [formData.pickupDate, formData.returnDate, selectedCar]);
+  
+    const showToast = (type, message) => setToast({ type, message, isVisible: true });
+    const hideToast = () => setToast((t) => ({ ...t, isVisible: false }));
+  
+    const handleInputChange = (e) => setFormData((s) => ({ ...s, [e.target.name]: e.target.value }));
+  
+    const handleVariantSelect = (variant) => {
+      setSelectedVariant(variant);
+      setFormData((s) => ({ ...s, vehicleVariantId: variant?.id || "" }));
+    };
+  
+    const handleFileChange = (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const allowed = ["image/jpeg", "image/png", "image/jpg"];
+      if (!allowed.includes(file.type)) {
+        showToast("error", "Only JPG/PNG images allowed.");
+        return;
+      }
+      setGovIdFile(file);
+      setGovIdPreview(URL.createObjectURL(file));
+    };
+  
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      if (isSubmitting) return;
+      setIsSubmitting(true);
+  
+      try {
+        if (!formData.vehicleVariantId) {
+          showToast("error", "Please select a color variant.");
+          setIsSubmitting(false);
+          return;
+        }
+        if (!govIdFile) {
+          showToast("error", "Please upload a valid Government ID image.");
+          setIsSubmitting(false);
+          return;
+        }
+        if (selectedVariant && Number(selectedVariant.available_quantity) === 0) {
+          showToast("error", "Selected variant is fully booked.");
+          setIsSubmitting(false);
+          return;
+        }
+  
+        const start = new Date(formData.pickupDate);
+        const end = new Date(formData.returnDate);
+        if (!(formData.pickupDate && formData.returnDate) || end <= start) {
+          showToast("error", "Please set a valid rental date range.");
+          setIsSubmitting(false);
+          return;
+        }
+  
+        const fileName = `${Date.now()}_${govIdFile.name}`;
+        const { error: uploadError } = await supabase.storage.from("gov_ids").upload(fileName, govIdFile);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from("gov_ids").getPublicUrl(fileName);
+        const govIdUrl = urlData?.publicUrl || "";
+  
+        const bookingRow = {
+          vehicle_id: selectedCar.id,
+          vehicle_variant_id: formData.vehicleVariantId,
+          customer_name: formData.fullName,
+          customer_email: formData.email,
+          customer_phone: formData.phone,
+          rental_start_date: formData.pickupDate,
+          rental_end_date: formData.returnDate,
+          pickup_location: formData.pickupLocation,
+          license_number: formData.licenseNumber,
+          total_price: totalPrice,
+          gov_id_url: govIdUrl,
+          status: "pending",
+        };
+  
+        const { error: insertError } = await supabase.from("bookings").insert([bookingRow]);
+        if (insertError) throw insertError;
+  
+        showToast("success", "Booking submitted successfully!");
+        await refreshBookings?.();
+        await refreshVariants();
+        setTimeout(() => onClose(), 1200);
+      } catch (err) {
+        console.error(err);
+        showToast("error", "Booking failed. Please try again.");
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+  
+    const renderVariantSwatch = (variant) => {
+      const colorName = variant.color.toLowerCase();
+      let bgColor = '#e5e7eb';
+  
+      if (colorName.includes('white') || colorName.includes('pearl')) bgColor = '#ffffff';
+      else if (colorName.includes('black') || colorName.includes('midnight')) bgColor = '#1f2937';
+      else if (colorName.includes('silver') || colorName.includes('metallic')) bgColor = '#9ca3af';
+      else if (colorName.includes('red')) bgColor = '#dc2626';
+      else if (colorName.includes('blue')) bgColor = '#2563eb';
+      else if (colorName.includes('gray') || colorName.includes('grey')) bgColor = '#6b7280';
+  
+      const isSelected = selectedVariant?.id === variant.id;
+      const isUnavailable = Number(variant.available_quantity) === 0;
+  
+      return (
+        <button
+          key={variant.id}
+          onClick={() => !isUnavailable && handleVariantSelect(variant)}
+          disabled={isUnavailable}
+          className={`group relative flex flex-col items-center gap-3 p-4 rounded-2xl border-2 transition-all duration-300 min-w-[100px] ${
+            isUnavailable
+              ? 'opacity-40 cursor-not-allowed border-gray-200 bg-gray-50'
+              : 'hover:bg-white hover:shadow-md cursor-pointer border-gray-200 hover:border-gray-300'
+          } ${isSelected ? 'ring-3 ring-black ring-opacity-20 bg-white shadow-lg border-gray-400' : ''}`}
+        >
+          <div
+            className={`w-12 h-12 rounded-full border-3 shadow-sm transition-all duration-200 ${
+              !isUnavailable ? 'group-hover:scale-110 group-hover:shadow-md' : ''
+            } ${bgColor === '#ffffff' ? 'border-gray-300' : 'border-gray-200'} ${isSelected ? 'scale-110 shadow-md' : ''}`}
+            style={{ backgroundColor: bgColor }}
+          />
+          <div className="text-center">
+            <span className={`text-sm font-semibold block ${isSelected ? 'text-black' : 'text-gray-700'}`}>
+              {variant.color}
+            </span>
+            <span className={`text-xs block mt-1 ${
+              isUnavailable ? 'text-red-500 font-medium' :
+                variant.available_quantity <= 2 ? 'text-orange-500 font-medium' : 'text-green-600'
+            }`}>
+              {isUnavailable ? 'Out of stock' : `${variant.available_quantity} available`}
+            </span>
+          </div>
+          {isUnavailable && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                Unavailable
+              </div>
+            </div>
+          )}
+        </button>
+      );
+    };
+  
+    if (!isOpen) return null;
+  
+    const displayCar = selectedCar || {
+      make: 'Toyota',
+      model: 'Camry',
+      year: 2024,
+      seats: 5,
+      price_per_day: 3500,
+      image_url: defaultBackground
+    };
+  
+    return (
+      <>
+        <Toast {...toast} onClose={hideToast} />
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-7xl w-full max-h-[95vh] overflow-y-auto shadow-2xl">
+            <div className="flex flex-col lg:flex-row min-h-[700px]">
+              <div className="lg:w-2/5 bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 p-8 flex flex-col">
+                <div className="flex-1 flex items-center justify-center mb-8">
+                  <div className="w-full h-80 lg:h-96 bg-white rounded-3xl shadow-lg flex items-center justify-center overflow-hidden border border-gray-100">
+                    <img
+                      src={selectedVariant?.image_url || displayCar?.image_url || defaultBackground}
+                      alt={`${displayCar?.make} ${displayCar?.model}`}
+                      className="object-contain w-full h-full p-6"
+                    />
+                  </div>
+                </div>
+                <div className="mb-8 text-center lg:text-left">
+                  <h3 className="text-3xl font-bold text-gray-900 mb-3">
+                    {displayCar?.make} {displayCar?.model}
+                  </h3>
+                  <div className="flex items-center justify-center lg:justify-start gap-6 text-sm text-gray-600 mb-4">
+                    <span className="flex items-center gap-2 bg-white px-3 py-2 rounded-full shadow-sm">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      {displayCar?.year}
+                    </span>
+                    <span className="flex items-center gap-2 bg-white px-3 py-2 rounded-full shadow-sm">
+                      <Car className="w-4 h-4 text-gray-400" />
+                      {displayCar?.seats} seats
+                    </span>
+                  </div>
+                  <div className="text-3xl font-bold text-emerald-600 mb-2">
+                    ₱{displayCar?.price_per_day?.toLocaleString()}
+                    <span className="text-lg font-normal text-gray-500 ml-1">/day</span>
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                  <h4 className="text-xl font-bold text-gray-900 mb-5 flex items-center gap-3">
+                    <div className="w-2 h-2 bg-black rounded-full"></div>
+                    Choose Your Color
+                  </h4>
+                  {variantsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
+                      <span className="ml-3 text-gray-600">Loading color options...</span>
+                    </div>
+                  ) : variants.length === 0 ? (
+                    <div className="text-center py-6 text-gray-500">
+                      No color variants available
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      {variants.map(renderVariantSwatch)}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="lg:w-3/5 p-8">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-3xl font-bold text-gray-900">Complete Your Booking</h2>
+                  <button
+                    onClick={onClose}
+                    className="w-12 h-12 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-200 hover:scale-105"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-8">
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
+                    <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                        <User className="w-5 h-5 text-blue-600" />
+                      </div>
+                      Personal Information
+                    </h3>
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name *</label>
+                        <input
+                          type="text"
+                          name="fullName"
+                          value={formData.fullName}
+                          onChange={handleInputChange}
+                          required
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
+                          placeholder="Enter your full name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address *</label>
+                        <input
+                          type="email"
+                          name="email"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                          required
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
+                          placeholder="Enter your email"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number *</label>
+                        <input
+                          type="tel"
+                          name="phone"
+                          value={formData.phone}
+                          onChange={handleInputChange}
+                          required
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
+                          placeholder="Enter your phone number"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">License Number *</label>
+                        <input
+                          type="text"
+                          name="licenseNumber"
+                          value={formData.licenseNumber}
+                          onChange={handleInputChange}
+                          required
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
+                          placeholder="Enter your license number"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 border border-green-100">
+                    <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                        <Clock className="w-5 h-5 text-green-600" />
+                      </div>
+                      Rental Details
+                    </h3>
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Pickup Date *</label>
+                        <input
+                          type="date"
+                          name="pickupDate"
+                          value={formData.pickupDate}
+                          onChange={handleInputChange}
+                          min={new Date().toISOString().split("T")[0]}
+                          required
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Return Date *</label>
+                        <input
+                          type="date"
+                          name="returnDate"
+                          value={formData.returnDate}
+                          onChange={handleInputChange}
+                          min={formData.pickupDate || new Date().toISOString().split("T")[0]}
+                          required
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-5">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Pickup Location *</label>
+                      <input
+                        type="text"
+                        name="pickupLocation"
+                        value={formData.pickupLocation}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white"
+                        placeholder="Enter pickup location"
+                      />
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-6 border border-purple-100">
+                    <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                      <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                        <CreditCard className="w-5 h-5 text-purple-600" />
+                      </div>
+                      Identity Verification
+                    </h3>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-3">Upload Government ID *</label>
+                      <div className="border-3 border-dashed border-gray-300 rounded-2xl p-8 text-center hover:border-purple-400 hover:bg-white transition-all duration-300 bg-white/50">
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg"
+                          onChange={handleFileChange}
+                          className="hidden"
+                          id="govId"
+                        />
+                        <label htmlFor="govId" className="cursor-pointer block">
+                          <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Upload className="w-8 h-8 text-purple-600" />
+                          </div>
+                          <p className="text-lg font-medium text-gray-700 mb-2">Click to upload your ID</p>
+                          <p className="text-sm text-gray-500">
+                            {govIdFile ? govIdFile.name : "JPEG or PNG (Max 5MB)"}
+                          </p>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center bg-gray-100 p-6 rounded-2xl border border-gray-200">
+                    <div>
+                      <div className="text-xl text-gray-600 font-semibold">Total Price ({rentalDays} days)</div>
+                      <div className="text-4xl font-extrabold text-emerald-600 mt-1">
+                        ₱{totalPrice.toLocaleString()}
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || !selectedVariant || Number(selectedVariant?.available_quantity) === 0}
+                      className={`px-8 py-4 rounded-full text-lg font-bold transition-all duration-300 transform hover:scale-105 ${
+                        isSubmitting || !selectedVariant || Number(selectedVariant?.available_quantity) === 0
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-black text-white hover:bg-gray-800 shadow-lg'
+                      }`}
+                    >
+                      {isSubmitting ? "Submitting..." : "Confirm Booking"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  };
 
-// Navbar Component
+
+/* ===========================
+   Navbar
+   =========================== */
 const Navbar = ({ onRentClick, scrollToSection, refs }) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [active, setActive] = useState("home")
+
+  const handleScroll = (ref, name) => {
+    scrollToSection(ref)
+    setActive(name)
+    setIsOpen(false)
+  }
 
   return (
-    <nav className="bg-[#eff2f7] sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <nav className="bg-[#eff2f7] sticky top-0 z-50 shadow-md">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
+          {/* Logo */}
           <div className="flex items-center flex-shrink-0">
-            <img src={logo} alt="The Rental Den Logo" className="h-15 w-auto mr-2" />
+            <img src={logo} alt="The Rental Den Logo" className="h-12 w-auto mr-2" />
+            <span className="text-xl font-bold text-gray-900">The Rental Den</span>
           </div>
 
-          <div className="hidden md:flex items-center space-x-8">
+          {/* Desktop Menu */}
+          <div className="hidden md:flex items-center space-x-10">
             <button
-              onClick={() => scrollToSection(refs.heroRef)}
-              className="text-gray-900 font-medium hover:text-blue-600 transition-colors"
+              onClick={() => handleScroll(refs.heroRef, "home")}
+              className={`font-medium transition-colors relative ${
+                active === "home" ? "text-black" : "text-gray-600 hover:text-black"
+              }`}
             >
               HOME
+              {active === "home" && <span className="absolute left-0 -bottom-1 w-full h-0.5 bg-black rounded" />}
             </button>
             <button
-              onClick={() => scrollToSection(refs.whyChooseUsRef)}
-              className="text-gray-600 font-medium hover:text-blue-600 transition-colors"
+              onClick={() => handleScroll(refs.whyChooseUsRef, "about")}
+              className={`font-medium transition-colors relative ${
+                active === "about" ? "text-black" : "text-gray-600 hover:text-black"
+              }`}
             >
               ABOUT US
+              {active === "about" && <span className="absolute left-0 -bottom-1 w-full h-0.5 bg-black rounded" />}
             </button>
             <button
-              onClick={() => scrollToSection(refs.fleetRef)}
-              className="text-gray-600 font-medium hover:text-blue-600 transition-colors"
+              onClick={() => handleScroll(refs.fleetRef, "cars")}
+              className={`font-medium transition-colors relative ${
+                active === "cars" ? "text-black" : "text-gray-600 hover:text-black"
+              }`}
             >
               CARS
+              {active === "cars" && <span className="absolute left-0 -bottom-1 w-full h-0.5 bg-black rounded" />}
             </button>
             <button
               onClick={onRentClick}
-              className="bg-black text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800 transition-colors"
+              className="bg-black text-white px-6 py-3 rounded-full font-medium hover:bg-gray-800 transition-transform transform hover:scale-105"
             >
               Rent Now
             </button>
           </div>
 
-          {/* Mobile menu button */}
+          {/* Mobile Menu Button */}
           <div className="md:hidden">
-            <button onClick={() => setIsOpen(!isOpen)} className="p-2 rounded-md text-gray-600 hover:text-gray-900">
+            <button onClick={() => setIsOpen(!isOpen)} className="p-2 rounded-md text-gray-700 hover:text-black">
               {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
           </div>
         </div>
 
-        {/* Mobile Navigation */}
+        {/* Mobile Drawer */}
         {isOpen && (
-          <div className="md:hidden border-t">
-            <div className="px-2 pt-2 pb-3 space-y-1 bg-white">
-              <button onClick={() => scrollToSection(refs.heroRef)} className="block px-3 py-2 text-gray-900 font-medium">
+          <div className="md:hidden pb-4">
+            <div className="space-y-2 pt-2">
+              <button
+                onClick={() => handleScroll(refs.heroRef, "home")}
+                className={`block w-full text-left font-medium ${
+                  active === "home" ? "text-black" : "text-gray-600 hover:text-black"
+                }`}
+              >
                 HOME
               </button>
-              <button onClick={() => scrollToSection(refs.whyChooseUsRef)} className="block px-3 py-2 text-gray-600 font-medium">
+              <button
+                onClick={() => handleScroll(refs.whyChooseUsRef, "about")}
+                className={`block w-full text-left font-medium ${
+                  active === "about" ? "text-black" : "text-gray-600 hover:text-black"
+                }`}
+              >
                 ABOUT US
               </button>
-              <button onClick={() => scrollToSection(refs.fleetRef)} className="block px-3 py-2 text-gray-600 font-medium">
+              <button
+                onClick={() => handleScroll(refs.fleetRef, "cars")}
+                className={`block w-full text-left font-medium ${
+                  active === "cars" ? "text-black" : "text-gray-600 hover:text-black"
+                }`}
+              >
                 CARS
               </button>
               <button
                 onClick={onRentClick}
-                className="w-full mt-4 bg-black text-white px-6 py-3 rounded-md font-medium"
+                className="w-full bg-black text-white px-6 py-3 rounded-full font-medium hover:bg-gray-800 transition-transform transform hover:scale-105"
               >
                 Rent Now
               </button>
@@ -469,101 +793,90 @@ const Navbar = ({ onRentClick, scrollToSection, refs }) => {
   )
 }
 
-
-// Hero Section Component
+/* ===========================
+   Hero
+   =========================== */
 const HeroSection = () => {
   const [loaded, setLoaded] = useState(false)
   const [scrollY, setScrollY] = useState(0)
 
   useEffect(() => {
-    // Trigger zoom-in animation after mount
-    setTimeout(() => setLoaded(true), 100)
-
-    // Track scroll for movement
-    const handleScroll = () => setScrollY(window.scrollY)
-    window.addEventListener("scroll", handleScroll)
-    return () => window.removeEventListener("scroll", handleScroll)
+    const t = setTimeout(() => setLoaded(true), 100)
+    const onScroll = () => setScrollY(window.scrollY)
+    window.addEventListener("scroll", onScroll)
+    return () => {
+      clearTimeout(t)
+      window.removeEventListener("scroll", onScroll)
+    }
   }, [])
 
   return (
     <>
-    <div className="relative h-[1000px] bg-[#eff2f7] ">
-      <section className="bg-gradient-to-b w-full overflow-hidden absolute pt-20 pb-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid lg:grid-cols-2 items-center ">
-            {/* Left Content */}
-            <div className="lg:pr-16 relative z-20 mb-5">
-              <h1 className="text-5xl lg:text-7xl font-bold text-gray-900 leading-tight mb-6">
-                Find Your <br />
-                Perfect Ride <br />
-                Today
-              </h1>
-              <p className="text-3xl font-normal text-gray-900 leading-relaxed">
-                From Comfort to Luxury, <br />
-                It's All in One Den
-              </p>
-            </div>
-  
-            {/* Right Content - Car with animation */}
-            <div className="relative lg:-ml-25 z-50 w-[1100px] -mt-8 flex justify-center">
-              {/* Speed Blur Effect */}
-              <div
-                className="absolute inset-y-10 right-0 w-full rounded-full blur-3xl"
-                style={{
-                  background:
-                    "linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.2) 100%)",
-                  transform: `translateX(${scrollY * 0.5}px)`,
-                  zIndex: -1,
-                }}
-              ></div>
-  
-              {/* Car */}
-              <img
-                src={HeroPageCar2}
-                alt={HeroPageCar2}
-                className={`w-full max-w-4xl object-contain drop-shadow-2xl transform transition-all duration-1000 ease-out ${
-                  loaded ? "scale-100 opacity-100" : "scale-75 opacity-0"
-                }`}
-                style={{
-                  transform: `translateX(${scrollY * 0.3}px) scale(${
-                    loaded ? 1 : 0.75
-                  })`,
-                }}
-              />
+      <div className="relative h-[1000px] bg-[#eff2f7]">
+        <section className="bg-gradient-to-b w-full overflow-hidden absolute pt-20 pb-40">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div className="grid lg:grid-cols-2 items-center">
+              <div className="lg:pr-16 relative z-20 mb-5">
+                <h1 className="text-5xl lg:text-7xl font-bold text-gray-900 leading-tight mb-6">
+                  Find Your <br />
+                  Perfect Ride <br />
+                  Today
+                </h1>
+                <p className="text-3xl font-normal text-gray-900 leading-relaxed">
+                  From Comfort to Luxury, <br />
+                  It's All in One Den
+                </p>
+              </div>
+
+              <div className="relative lg:-ml-25 z-50 w-[1100px] -mt-8 flex justify-center">
+                <div
+                  className="absolute inset-y-10 right-0 w-full rounded-full blur-3xl"
+                  style={{
+                    background: "linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.2) 100%)",
+                    transform: `translateX(${scrollY * 0.5}px)`,
+                    zIndex: -1,
+                  }}
+                />
+                <img
+                  src={HeroPageCar2}
+                  alt="hero-car"
+                  className={`w-full max-w-4xl object-contain drop-shadow-2xl transition-all duration-1000 ease-out ${
+                    loaded ? "scale-100 opacity-100" : "scale-75 opacity-0"
+                  }`}
+                  style={{ transform: `translateX(${scrollY * 0.3}px) scale(${loaded ? 1 : 0.75})` }}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      </section>
-  
-      {/* New Section with Background Image */}
-      <section
-        className="w-full h-full bg-cover bg-center"
-        style={{ backgroundImage: `url(${BackgroundImage})`, position: `absolute`, top: `80px` }}
-        
-      ></section>
-    </div>
-      
+        </section>
+
+        <section
+          className="w-full h-full bg-cover bg-center"
+          style={{ backgroundImage: `url(${BackgroundImage})`, position: "absolute", top: "80px" }}
+        />
+      </div>
     </>
   )
-  
-  
 }
 
-// Why Choose Us Component
+/* ===========================
+   Why Choose Us
+   =========================== */
 const WhyChooseUs = () => {
   const features = [
     {
-      icon: <Car className="h-10 w-10" />,
+      icon: <img src={carIcon} alt="Car Icon" className="h-16 w-16 object-contain" />,
       title: "Quality Vehicles",
-      description: "We maintain our fleet to the highest standards so you can enjoy a safe and smooth ride every time.",
+      description:
+        "We maintain our fleet to the highest standards so you can enjoy a safe and smooth ride every time.",
     },
     {
-      icon: <Calendar className="h-10 w-10" />,
+      icon: <img src={calendarIcon} alt="Calendar Icon" className="h-16 w-16 object-contain" />,
       title: "Seamless Booking Experience",
       description: "Simple, fast, and user-friendly. Book your car online in minutes, with instant confirmation.",
     },
     {
-      icon: <HeadphonesIcon className="h-10 w-10" />,
+      icon: <img src={supportIcon} alt="Support Icon" className="h-16 w-16 object-contain" />,
       title: "Local Expertise & Friendly Support",
       description:
         "Our Cebu-based team is here to help with tailored tips, great deals, and customer support whenever you need it.",
@@ -571,7 +884,7 @@ const WhyChooseUs = () => {
   ]
 
   return (
-    <section className="py-20  bg-[#F0F5F8] relative">
+    <section className="py-20 bg-[#F0F5F8] relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">Why Choose Us?</h2>
         <p className="text-lg text-gray-600 mb-16 max-w-3xl mx-auto leading-relaxed">
@@ -585,7 +898,7 @@ const WhyChooseUs = () => {
               key={index}
               className="bg-black text-white p-10 rounded-xl hover:bg-gray-800 transition-all duration-300 hover:scale-105"
             >
-              <div className="text-white mb-8 flex justify-center">{feature.icon}</div>
+              <div className="mb-8 flex justify-center">{feature.icon}</div>
               <h3 className="text-xl font-bold mb-6">{feature.title}</h3>
               <p className="text-gray-300 leading-relaxed">{feature.description}</p>
             </div>
@@ -596,37 +909,33 @@ const WhyChooseUs = () => {
   )
 }
 
-// About Section Component
+/* ===========================
+   About
+   =========================== */
 const AboutSection = () => {
   return (
-    <section className="py-20 py-20 bg-[#F0F5F8]">
+    <section className="py-20 bg-[#F0F5F8]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-16 items-start">
-          {/* Left Side - Vertical Image */}
-          <div>
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+          <div className="flex justify-center items-center relative">
+            <div className="w-[500px] h-[500px] rounded-full overflow-hidden relative shadow-lg bg-gray-200">
+              <img src={aboutcircle} alt="Circle background" className="w-full h-full object-cover" />
+            </div>
             <img
-              src={aboutcra}
-              alt="Car side mirror with blurred road background"
-              className="w-[1000px] h-[400px] rounded-xl object-cover shadow-lg"
+              src={carImage}
+              alt="Car"
+              className="absolute -top-[-40%] left-[55%] -translate-x-1/2 w-[1000px] h-auto"
             />
           </div>
 
-          {/* Right Side - Content */}
-          <div className="flex items-center justify-center h-[400px]">
-            <div className="text-center text-gray-500">
-              <div className="rounded-lg flex items-center justify-center">
-                <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-16 text-left">About Rental Den</h2>
-              </div>
-              <p>
-                "Welcome to The Rental Den, your premier car rental service. We are passionate about providing our
-                customers with an exceptional and seamless rental experience. Born from a love for travel and
-                exploration, we understand the importance of having a reliable vehicle to make your journey memorable.
-                Our mission is to offer a diverse, high-quality fleet, from economy cars for city trips to spacious SUVs
-                for family adventures. We are committed to transparent pricing, straightforward booking, and friendly,
-                local customer support to ensure your complete satisfaction. At The Rental Den, we don't just rent cars;
-                we help you create lasting memories."
-              </p>
-            </div>
+          <div>
+            <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">About Rental Den</h2>
+            <p className="text-gray-600 leading-relaxed">
+              Welcome to The Rental Den – your trusted car rental service. We offer a wide range of reliable vehicles,
+              from economy cars to spacious SUVs, with transparent pricing and easy booking. Our mission is to make
+              every journey smooth, memorable, and stress-free with friendly local support. At The Rental Den, we don’t
+              just rent cars – we help you create lasting memories.
+            </p>
           </div>
         </div>
       </div>
@@ -634,7 +943,9 @@ const AboutSection = () => {
   )
 }
 
-// HowItWorks Component
+/* ===========================
+   How It Works
+   =========================== */
 const HowItWorks = () => {
   const steps = [
     {
@@ -660,19 +971,15 @@ const HowItWorks = () => {
   return (
     <section className="relative w-full overflow-hidden">
       <div className="grid grid-cols-1 lg:grid-cols-2">
-        {/* Left column */}
         <div className="bg-[#101010] text-white py-16 lg:py-20 px-6 md:px-10 lg:pl-16 xl:pl-24 lg:pr-10 flex flex-col">
-          {/* Centered heading */}
           <div className="flex justify-center">
             <h2 className="text-4xl lg:text-5xl font-bold mb-10">How It Works</h2>
           </div>
-
-          {/* Steps */}
           <div className="space-y-12 max-w-2xl mx-auto">
             {steps.map((s) => (
               <div key={s.number} className="flex items-start">
                 <span className="text-5xl font-bold leading-none mr-6 w-16">{s.number}</span>
-                <div className="mt-5"> {/* pushes title slightly below the number */}
+                <div className="mt-5">
                   <h3 className="text-xl font-semibold mb-2">{s.title}</h3>
                   <p className="text-gray-300 leading-relaxed">{s.description}</p>
                 </div>
@@ -681,13 +988,8 @@ const HowItWorks = () => {
           </div>
         </div>
 
-        {/* Right column: background image */}
         <div className="relative">
-          <img
-            src={howitworks}
-            alt="Car side mirror on a rainy road"
-            className="absolute top-0 right-0 w-full h-full object-cover"
-          />
+          <img src={aboutcra} alt="Car side mirror" className="absolute top-0 right-0 w-full h-full object-cover" />
         </div>
       </div>
     </section>
@@ -695,46 +997,121 @@ const HowItWorks = () => {
 }
 
 
+const CarCard = ({ car, onRentClick, onOpenDetails }) => {
+  const [variantStats, setVariantStats] = useState({
+    totalAvailable: 0,
+    totalQuantity: 0,
+    hasVariants: false,
+    variantCount: 0 // Track number of different variants
+  })
+  const [isLoading, setIsLoading] = useState(true)
 
-// Car Card Component
-const CarCard = ({ car, onRentClick }) => {
-  const defaultImage =
-    "https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80"
+  // Fetch variant availability when component mounts or car changes
+  useEffect(() => {
+    const fetchVariantAvailability = async () => {
+      if (!car?.id) return
+      
+      setIsLoading(true)
+      try {
+        const { data: variants, error } = await supabase
+          .from("vehicle_variants")
+          .select("id, color, total_quantity, available_quantity")
+          .eq("vehicle_id", car.id)
+
+        if (error) {
+          console.error("Error fetching variants:", error)
+          // Fallback to vehicle-level availability
+          setVariantStats({
+            totalAvailable: car.available_quantity || 0,
+            totalQuantity: car.total_quantity || 0,
+            hasVariants: false,
+            variantCount: 0
+          })
+        } else if (variants && variants.length > 0) {
+          // Calculate totals from variants - this is the key fix
+          const totalAvailable = variants.reduce((sum, variant) => 
+            sum + (variant.available_quantity || 0), 0)
+          const totalQuantity = variants.reduce((sum, variant) => 
+            sum + (variant.total_quantity || 0), 0)
+          
+          setVariantStats({
+            totalAvailable,
+            totalQuantity,
+            hasVariants: true,
+            variantCount: variants.length // Number of different color variants
+          })
+        } else {
+          // No variants found, use vehicle-level data
+          setVariantStats({
+            totalAvailable: car.available_quantity || 0,
+            totalQuantity: car.total_quantity || 0,
+            hasVariants: false,
+            variantCount: 0
+          })
+        }
+      } catch (error) {
+        console.error("Error in fetchVariantAvailability:", error)
+        // Fallback to vehicle-level availability
+        setVariantStats({
+          totalAvailable: car.available_quantity || 0,
+          totalQuantity: car.total_quantity || 0,
+          hasVariants: false,
+          variantCount: 0
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchVariantAvailability()
+  }, [car?.id, car.available_quantity, car.total_quantity])
+
+  // Determine if car is actually available based on variants or vehicle data
+  const isActuallyAvailable = car.available && variantStats.totalAvailable > 0
 
   return (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 hover:scale-105 w-full max-w-[500px] mx-auto">
-   <div className="relative">
-  <img
-    src={car.image_url || defaultImage}
-    alt={`${car.make} ${car.model}`}
-    loading="lazy"
-    className={`w-full h-64 object-cover ${
-      !car.available ? "filter blur-xs" : ""
-    }`}
-  />
+    <div
+      className="rounded-xl shadow-lg p-4 hover:shadow-xl cursor-pointer"
+      onClick={() => onOpenDetails(car)}
+    >
+      <div className="relative h-64 w-full">
+        {/* Default background */}
+        <img
+          src={defaultBackground}
+          alt="Default background"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        
+        {/* Car image on top of background */}
+        <img
+          src={car.image_url || defaultBackground}
+          alt={`${car.make} ${car.model}`}
+          loading="lazy"
+          className={`relative w-full h-full object-contain p-4 ${
+            !isActuallyAvailable ? "filter blur-xs" : ""
+          }`}
+        />
+        
+        {!isActuallyAvailable && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-white font-bold text-2xl bg-black/60 px-4 py-2 rounded-lg">
+              Not Available
+            </span>
+          </div>
+        )}
+      </div>
 
-  {!car.available && (
-    <div className="absolute inset-0 flex items-center justify-center">
-      <span className="text-white font-bold text-2xl bg-opacity-60 px-4 py-2 rounded-lg">
-        Not Available
-      </span>
-    </div>
-  )}
-</div>
-
-
-      <div className="p-6">
+      <div className="p-6" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-2xl font-bold text-gray-900 mb-4">
           {car.make} {car.model} ({car.year})
         </h3>
 
-        {/* Car specifications */}
         <div className="flex items-center justify-between mb-6 text-sm text-gray-900">
           <div className="flex items-center space-x-2">
             <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center">
               <Gauge className="h-5 w-5" />
             </div>
-            <span>{car.mileage ? `${car.mileage.toLocaleString()} km` : "N/A"}</span>
+            <span>{car.mileage ? `${Number(car.mileage).toLocaleString()} km` : "N/A"}</span>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center">
@@ -750,59 +1127,116 @@ const CarCard = ({ car, onRentClick }) => {
           </div>
         </div>
 
-        {/* Price and availability */}
         <div className="mb-6">
-          <div className="text-2xl font-bold text-green-600 mb-1">₱{car.price_per_day}/day</div>
-          <div className="text-sm text-gray-500">
-            Available: {car.available_quantity}/{car.total_quantity} units
+          <div className="text-2xl font-bold text-green-600 mb-1">
+            ₱{car.price_per_day}/day
           </div>
-          {car.description && <p className="text-sm text-gray-600 mt-2 line-clamp-2">{car.description}</p>}
+          <div className="text-sm text-gray-500">
+            {isLoading ? (
+              <span className="animate-pulse">Loading availability...</span>
+            ) : variantStats.hasVariants && variantStats.variants && variantStats.variants.length > 0 ? (
+              <div className="space-y-1">
+                <div className="text-xs text-gray-400 mb-2">Availability by color:</div>
+                {variantStats.variants.map((variant, index) => (
+                  <div key={variant.id} className="flex justify-between items-center text-xs">
+                    <span className="font-medium text-gray-600">{variant.color}:</span>
+                    <span className={`font-semibold ${
+                      variant.available_quantity === 0 ? 'text-red-500' : 
+                      variant.available_quantity <= 2 ? 'text-orange-500' : 'text-green-600'
+                    }`}>
+                      {variant.available_quantity}
+                    </span>
+                  </div>
+                ))}
+                <div className="pt-1 mt-2 border-t border-gray-200 text-xs">
+                  <span className="text-gray-400">Total: </span>
+                  <span className="font-semibold text-gray-600">
+                    {variantStats.totalAvailable}/{variantStats.totalQuantity}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <>
+                Available: {variantStats.totalAvailable}/{variantStats.totalQuantity} units
+              </>
+            )}
+          </div>
+          {car.description && (
+            <p className="text-sm text-gray-600 mt-2 line-clamp-2">{car.description}</p>
+          )}
         </div>
 
-        {/* Buttons */}
-        <button
-          onClick={() => onRentClick(car)}
-          disabled={!car.available || car.available_quantity === 0}
-          className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
-            car.available && car.available_quantity > 0
-              ? "bg-black text-white hover:bg-gray-800 cursor-pointer"
-              : "bg-gray-300 text-gray-500 cursor-not-allowed"
-          }`}
-        >
-          {car.available && car.available_quantity > 0 ? "Rent Now" : "Unavailable"}
-        </button>
+        <div className="flex gap-3">
+          {/* Rent Now → directly opens rental form */}
+          <button
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              onRentClick(car); 
+            }}
+            disabled={!isActuallyAvailable || isLoading}
+            className="flex-1 py-3 px-4 rounded-lg font-medium transition-colors bg-black text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Rent Now
+          </button>
+
+          {/* Details → opens details modal */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenDetails?.(car);
+            }}
+            className="flex-1 py-3 px-4 border rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Details
+          </button>
+        </div>
+
       </div>
     </div>
   )
 }
-
-// Fleet Section Component
-const FleetSection = ({ onRentClick }) => {
+/* ===========================
+   Fleet Section
+   =========================== */
+   const FleetSection = ({ onRentClick, onOpenDetails }) => {
   const [vehicles, setVehicles] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-
   useEffect(() => {
     const fetchVehicles = async () => {
       try {
         setLoading(true)
         const { data, error } = await supabase
           .from("vehicles")
-          .select("*")
+          .select(`
+            *,
+            vehicle_variants ( available_quantity )
+          `)
           .order("created_at", { ascending: false })
-
         if (error) throw error
-        setVehicles(data || [])
-      } catch (error) {
-        console.error("Error fetching vehicles:", error)
-        setError(error.message)
+  
+        // 🆕 compute availability based on variants
+        const enriched = (data || []).map(v => {
+          const variants = v.vehicle_variants || []
+          const totalAvailable = variants.reduce((sum, vv) => sum + (vv.available_quantity || 0), 0)
+          return {
+            ...v,
+            available: totalAvailable > 0,
+            available_quantity: totalAvailable,
+            total_quantity: variants.length
+          }
+        })
+  
+        setVehicles(enriched)
+      } catch (err) {
+        setError(err.message)
       } finally {
         setLoading(false)
       }
     }
-
     fetchVehicles()
   }, [])
+  
 
   return (
     <section className="py-20 bg-[#F0F5F8]">
@@ -810,13 +1244,13 @@ const FleetSection = ({ onRentClick }) => {
         <div className="text-center mb-16">
           <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">Explore Our Fleet</h2>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            Find the perfect car for your needs with our special rental offers. We provide a wide selection of
-            vehicles, easy booking, and exceptional value for your next journey.
+            Find the perfect car for your needs with our special rental offers. We provide a wide selection of vehicles,
+            easy booking, and exceptional value for your next journey.
           </p>
         </div>
 
         {loading ? (
-          <div className="flex justify-center  items-center py-20">
+          <div className="flex justify-center items-center py-20">
             <div className="text-lg text-gray-600">Loading vehicles...</div>
           </div>
         ) : error ? (
@@ -829,9 +1263,15 @@ const FleetSection = ({ onRentClick }) => {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 place-items-center">
-            {vehicles.map((vehicle) => (
-              <CarCard key={vehicle.id} car={vehicle} onRentClick={onRentClick} />
-            ))}
+           {vehicles.map((vehicle) => (
+            <CarCard
+              key={vehicle.id}
+              car={vehicle}
+              onRentClick={onRentClick}
+              onOpenDetails={onOpenDetails}
+            />
+          ))}
+
           </div>
         )}
       </div>
@@ -839,10 +1279,11 @@ const FleetSection = ({ onRentClick }) => {
   )
 }
 
-
+/* ===========================
+   FAQs
+   =========================== */
 const FAQs = () => {
   const [openIndex, setOpenIndex] = useState(null)
-
   const faqs = [
     {
       question: "What do I need to rent a car?",
@@ -866,9 +1307,7 @@ const FAQs = () => {
     },
   ]
 
-  const toggleFAQ = (index) => {
-    setOpenIndex(openIndex === index ? null : index)
-  }
+  const toggleFAQ = (i) => setOpenIndex(openIndex === i ? null : i)
 
   return (
     <section className="bg-[#101010] text-white py-20 px-6 md:px-10 lg:px-20">
@@ -881,24 +1320,17 @@ const FAQs = () => {
         </div>
 
         <div className="space-y-6">
-          {faqs.map((faq, index) => (
+          {faqs.map((faq, i) => (
             <div
-              key={index}
+              key={i}
               className="bg-[#1A1A1A] rounded-2xl p-6 shadow-md cursor-pointer transition hover:bg-[#222222]"
-              onClick={() => toggleFAQ(index)}
+              onClick={() => toggleFAQ(i)}
             >
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">{faq.question}</h3>
-                {openIndex === index ? (
-                  <ChevronUp className="w-6 h-6 text-gray-400" />
-                ) : (
-                  <ChevronDown className="w-6 h-6 text-gray-400" />
-                )}
+                {openIndex === i ? <ChevronUp className="w-6 h-6 text-gray-400" /> : <ChevronDown className="w-6 h-6 text-gray-400" />}
               </div>
-
-              {openIndex === index && (
-                <p className="text-gray-400 mt-4 leading-relaxed">{faq.answer}</p>
-              )}
+              {openIndex === i && <p className="text-gray-400 mt-4 leading-relaxed">{faq.answer}</p>}
             </div>
           ))}
         </div>
@@ -907,68 +1339,172 @@ const FAQs = () => {
   )
 }
 
-// Main App Component
+/* ===========================
+   Contact Us
+   =========================== */
+const ContactUs = () => {
+  return (
+    <section
+      className="relative py-20 px-6 md:px-10 lg:px-20 text-gray-900"
+      style={{ backgroundImage: `url(${bgContact})`, backgroundSize: "cover", backgroundPosition: "center" }}
+    >
+      <div className="absolute inset-0 bg-white/80"></div>
+      <div className="relative max-w-6xl mx-auto grid lg:grid-cols-2 gap-12">
+        <div>
+          <h2 className="text-4xl lg:text-5xl font-bold mb-6">Contact Us</h2>
+          <p className="text-gray-700 mb-6">
+            Have questions or need assistance with your booking? Our friendly team is here to help!
+          </p>
+
+          <div className="space-y-4">
+            <div className="flex items-center space-x-3">
+              <MapPin className="h-5 w-5" />
+              <span>Cebu City, Philippines</span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <Phone className="h-5 w-5" />
+              <a href="tel:+639000000000" className="hover:underline">
+                +63 900 000 0000
+              </a>
+            </div>
+            <div className="flex items-center space-x-3">
+              <Mail className="h-5 w-5" />
+              <a href="mailto:hello@rentalden.com" className="hover:underline">
+                hello@rentalden.com
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white/70 p-10 rounded-2xl shadow-xl space-y-6">
+          <h3 className="text-2xl font-bold mb-4">Send a Message</h3>
+          <form onSubmit={(e) => e.preventDefault()}>
+            <div className="grid gap-4">
+              <input
+                type="text"
+                placeholder="Your Name"
+                className="w-full p-3 rounded-lg bg-white/30 text-gray-900 focus:outline-none focus:ring-1 focus:ring-black"
+              />
+              <input
+                type="email"
+                placeholder="you@example.com"
+                className="w-full p-3 rounded-lg bg-white/30 text-gray-900 focus:outline-none focus:ring-1 focus:ring-black"
+              />
+              <textarea
+                rows="4"
+                placeholder="Write your message."
+                className="w-full p-3 rounded-lg bg-white/30 text-gray-900 focus:outline-none focus:ring-1 focus:ring-black"
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-900 transition"
+            >
+              Send Message
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ===========================
+   Main App
+   =========================== */
 const App = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedCar, setSelectedCar] = useState(null)
+  const [bookings, setBookings] = useState([]) // 🆕 show active bookings for cancel
 
+  // sections refs
   const heroRef = useRef(null)
   const whyChooseUsRef = useRef(null)
   const aboutRef = useRef(null)
   const fleetRef = useRef(null)
-  const faqRef = useRef(null) 
+  const faqRef = useRef(null)
+  const contactRef = useRef(null)
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+  const [isRentalOpen, setIsRentalOpen] = useState(false)
+  const [selectedVariant, setSelectedVariant] = useState(null)
 
-  const handleRentClick = (car = null) => {
+  
+  const handleOpenDetails = (car) => {
     setSelectedCar(car)
-    setIsModalOpen(true)
+    setSelectedVariant(null)
+    setIsDetailsOpen(true)
   }
+
+  const fetchBookings = async () => {
+    // 🆕 only confirmed bookings
+    const { data, error } = await supabase.from("bookings").select("*").eq("status", "confirmed").order("id", { ascending: false })
+    if (!error) setBookings(data || [])
+  }
+  useEffect(() => {
+    fetchBookings()
+  }, [])
+
+  const handleRentClick = (car, variant = null) => {
+    setSelectedCar(car)
+    setSelectedVariant(variant)
+    setIsDetailsOpen(false)   // if coming from details, close it
+    setIsRentalOpen(true)     // always open rental form
+  }
+  
 
   const handleCloseModal = () => {
     setIsModalOpen(false)
     setSelectedCar(null)
   }
-  const scrollToSection = (section) => {
-    section.current?.scrollIntoView({ behavior: "smooth" })
-  }
+  const scrollToSection = (ref) => ref.current?.scrollIntoView({ behavior: "smooth" })
 
   return (
     <div className="min-h-screen bg-[#F0F5F8] flex flex-col">
-      <Navbar
-        onRentClick={() => handleRentClick()}
-        scrollToSection={scrollToSection}
-        refs={{ heroRef, whyChooseUsRef, aboutRef, fleetRef, faqRef }}
-      />
+      <Navbar onRentClick={() => handleRentClick()} scrollToSection={scrollToSection} refs={{ heroRef, whyChooseUsRef, aboutRef, fleetRef, faqRef, contactRef }} />
 
       <div ref={heroRef}><HeroSection /></div>
       <div ref={whyChooseUsRef}><WhyChooseUs /></div>
       <div ref={aboutRef}><AboutSection /></div>
-      {/* New Section Here */}
       <HowItWorks />
-      <div ref={fleetRef}><FleetSection onRentClick={handleRentClick} /></div>
+      <div ref={fleetRef}>
+      <FleetSection 
+        onOpenDetails={handleOpenDetails} // 👈 pass handler
+        onRentClick={handleRentClick}     // still pass, in case you also use buttons
+      />
 
-      <RentalModal isOpen={isModalOpen} onClose={handleCloseModal} selectedCar={selectedCar} />
-            <div ref={faqRef}><FAQs /></div>
+      </div>
+      {/* Details Modal */}
+      <DetailsModal
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
+        car={selectedCar}
+        onRentClick={handleRentClick} // 👈 rent from inside details
+      />
+
 
       
+
+      {/* Rental Modal (form) */}
+      <RentalModal
+        isOpen={isRentalOpen}
+        onClose={() => setIsRentalOpen(false)}
+        selectedCar={selectedCar}
+        selectedVariant={selectedVariant}
+      />
+
+      <div ref={faqRef}><FAQs /></div>
+      <div ref={contactRef}><ContactUs /></div>
+
+      {/* lil util for toast animation */}
       <style>{`
         @keyframes slide-in {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
         }
-        
-        .animate-slide-in {
-          animation: slide-in 0.3s ease-out;
-        }
+        .animate-slide-in { animation: slide-in 0.3s ease-out; }
       `}</style>
     </div>
   )
 }
-
 
 export default App

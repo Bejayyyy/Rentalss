@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text } from 'react-native';
+import { View, Text ,Linking} from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './services/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,9 +19,24 @@ import CashFlowScreen from './screens/CashFlowScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import LoginScreen from './screens/LoginScreen';
 import { AuthProvider } from './services/AuthContext';
+import ResetPasswordScreen from './screens/ResetPasswordScreen';
+
+export const navigationRef = createNavigationContainerRef();
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
+
+const linking = {
+  prefixes: ["adminside://"],
+  config: {
+    screens: {
+      ResetPassword: "reset-password",
+    },
+  },
+};
+
+
+
 
 function VehiclesStack() {
   return (
@@ -84,7 +99,6 @@ function ReportsStack() {
 function AuthNavigator() {
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
         <StatusBar style="light" backgroundColor="#000" />
         <Stack.Navigator
           screenOptions={{
@@ -100,9 +114,15 @@ function AuthNavigator() {
             component={LoginScreen}
             options={{ headerShown: false }}
           />
+        
+          <Stack.Screen
+        name="ResetPassword" // 👈 add ResetPassword screen here
+        component={ResetPasswordScreen}
+        options={{ title: 'Reset Password' }}
+      />
           
         </Stack.Navigator>
-      </NavigationContainer>
+
     </SafeAreaProvider>
   );
 }
@@ -112,7 +132,7 @@ function MainNavigator() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      
         {/* ⚠️ StatusBar note: backgroundColor doesn't work on Android edge-to-edge, so we use headerStyle */}
         <StatusBar style="light" backgroundColor="#f59e0b" />
         
@@ -156,7 +176,6 @@ function MainNavigator() {
           <Tab.Screen name="Reports" component={ReportsStack} options={{ headerShown: false, title: '' }} />
           <Tab.Screen name="Calendar" component={CalendarScreen} options={{ title: '' }} />
         </Tab.Navigator>
-      </NavigationContainer>
     </SafeAreaProvider>
   );
 }
@@ -164,29 +183,44 @@ function MainNavigator() {
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // 1️⃣ Handle Supabase session & auth state
+useEffect(() => {
+  const getInitialSession = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    setUser(session?.user ?? null);
+    setLoading(false);
+  };
 
-  useEffect(() => {
-    // Get initial session
-    const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+  getInitialSession();
+
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    async (event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
-    };
+    }
+  );
 
-    getInitialSession();
+  return () => {
+    subscription?.unsubscribe();
+  };
+}, []);
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
+// 2️⃣ Handle deep links separately
+useEffect(() => {
+  const handleDeepLink = ({ url }) => {
+    console.log("Opened via deep link:", url);
+    if (url.includes("reset-password")) {
+      navigationRef.current?.navigate("ResetPassword");
+    }
+  };
 
-    return () => {
-      subscription?.unsubscribe();
-    };
-  }, []);
+  const subscription = Linking.addEventListener("url", handleDeepLink);
+  return () => subscription.remove();
+}, []);
+
+
+  
+    
 
   if (loading) {
     return (
@@ -199,7 +233,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider user = {user}>
-        {user ? <MainNavigator /> : <AuthNavigator />}
+        <NavigationContainer linking={linking}>
+          {user ? <MainNavigator /> : <AuthNavigator />}
+        </NavigationContainer>
       </AuthProvider>
     </SafeAreaProvider>
   );

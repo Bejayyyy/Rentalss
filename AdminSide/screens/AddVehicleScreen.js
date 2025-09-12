@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState ,useEffect} from "react"
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { supabase } from "../services/supabase"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { decode } from 'base64-arraybuffer'
 import * as FileSystem from 'expo-file-system'
+import ActionModal from "../components/AlertModal/ActionModal"
 
 const { width } = Dimensions.get("window")
 const isWeb = Platform.OS === "web"
@@ -38,21 +39,100 @@ export default function AddVehicleScreen({ navigation, route }) {
     mileage: editingVehicle?.mileage?.toString() || "",
     description: editingVehicle?.description || "",
     available: editingVehicle?.available ?? true,
-    totalQuantity: editingVehicle?.total_quantity?.toString() || "1",
-    availableQuantity: editingVehicle?.available_quantity?.toString() || "1",
-    imageUrl: editingVehicle?.image_url || null,
   })
 
+  // Color variants state
+  const [colorVariants, setColorVariants] = useState([
+    {
+      id: Date.now(),
+      color: "",
+      totalQuantity: "1",
+      availableQuantity: "1",
+      imageUri: null,
+      imageUrl: null
+    }
+  ])
+
   const [loading, setLoading] = useState(false)
-  const [imageUri, setImageUri] = useState(editingVehicle?.image_url || null)
+  
+  // Modal states
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [showDeleteVariantModal, setShowDeleteVariantModal] = useState(false)
+  const [variantToDelete, setVariantToDelete] = useState(null)
 
   const vehicleTypes = ["Sedan", "SUV", "Hatchback", "Convertible", "Truck", "Van", "Luxury"]
 
-  const base64ToBlob = (base64, contentType = 'application/octet-stream') => {
-    const byteArray = decode(base64);
-    return new Blob([byteArray], { type: contentType });
-  };
-  const pickImage = async () => {
+  // Load existing variants when editing
+  useEffect(() => {
+    if (isEditing && editingVehicle?.id) {
+      loadExistingVariants()
+    }
+  }, [isEditing, editingVehicle?.id])
+
+  const loadExistingVariants = async () => {
+    try {
+      const { data: variants, error } = await supabase
+        .from('vehicle_variants')
+        .select('*')
+        .eq('vehicle_id', editingVehicle.id)
+
+      if (error) {
+        console.error('Error loading variants:', error)
+        return
+      }
+
+      if (variants && variants.length > 0) {
+        const formattedVariants = variants.map(variant => ({
+          id: variant.id,
+          color: variant.color,
+          totalQuantity: variant.total_quantity.toString(),
+          availableQuantity: variant.available_quantity.toString(),
+          imageUri: variant.image_url,
+          imageUrl: variant.image_url
+        }))
+        setColorVariants(formattedVariants)
+      }
+    } catch (error) {
+      console.error('Error in loadExistingVariants:', error)
+    }
+  }
+
+  const addColorVariant = () => {
+    const newVariant = {
+      id: Date.now(),
+      color: "",
+      totalQuantity: "1",
+      availableQuantity: "1",
+      imageUri: null,
+      imageUrl: null
+    }
+    setColorVariants([...colorVariants, newVariant])
+  }
+
+  const handleRemoveVariant = (variantId) => {
+    if (colorVariants.length > 1) {
+      setVariantToDelete(variantId)
+      setShowDeleteVariantModal(true)
+    }
+  }
+
+  const confirmRemoveVariant = () => {
+    if (variantToDelete) {
+      setColorVariants(colorVariants.filter(variant => variant.id !== variantToDelete))
+      setVariantToDelete(null)
+    }
+    setShowDeleteVariantModal(false)
+  }
+
+  const updateColorVariant = (variantId, field, value) => {
+    setColorVariants(colorVariants.map(variant => 
+      variant.id === variantId 
+        ? { ...variant, [field]: value }
+        : variant
+    ))
+  }
+
+  const pickImageForVariant = async (variantId) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
 
     if (status !== "granted") {
@@ -68,123 +148,130 @@ export default function AddVehicleScreen({ navigation, route }) {
     })
 
     if (!result.canceled) {
-      setImageUri(result.assets[0].uri)
+      updateColorVariant(variantId, 'imageUri', result.assets[0].uri)
     }
   }
+
   const uploadImage = async (uri) => {
-    if (!uri) return null;
-  
-    const fileExt = uri.split(".").pop()?.toLowerCase() || "jpg";
-    const safeExt = fileExt === "heic" ? "jpg" : fileExt; // convert HEIC → JPG
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${safeExt}`;
-    const filePath = `vehicles/${fileName}`;
-    let contentType = `image/${safeExt === "jpg" ? "jpeg" : safeExt}`;
-  
+    if (!uri) return null
+
+    const fileExt = uri.split(".").pop()?.toLowerCase() || "jpg"
+    const safeExt = fileExt === "heic" ? "jpg" : fileExt
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${safeExt}`
+    const filePath = `vehicle-variants/${fileName}`
+    let contentType = `image/${safeExt === "jpg" ? "jpeg" : safeExt}`
+
     try {
       if (isWeb) {
-        // Web: Blob → File
-        const response = await fetch(uri);
-        if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
-        const blob = await response.blob();
-        if (blob.type) contentType = blob.type;
-  
-        const file = new File([blob], fileName, { type: contentType });
-  
+        const response = await fetch(uri)
+        if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`)
+        const blob = await response.blob()
+        if (blob.type) contentType = blob.type
+
+        const file = new File([blob], fileName, { type: contentType })
+
         const { error } = await supabase.storage
           .from("vehicle-images")
-          .upload(filePath, file, { contentType, upsert: false });
-  
-        if (error) throw error;
+          .upload(filePath, file, { contentType, upsert: false })
+
+        if (error) throw error
       } else {
-        // Mobile (iOS/Android): Base64 → ArrayBuffer
         const base64String = await FileSystem.readAsStringAsync(uri, {
           encoding: FileSystem.EncodingType.Base64,
-        });
-  
-        const arrayBuffer = decode(base64String);
-  
+        })
+
+        const arrayBuffer = decode(base64String)
+
         const { error } = await supabase.storage
           .from("vehicle-images")
-          .upload(filePath, arrayBuffer, { contentType, upsert: false });
-  
-        if (error) throw error;
+          .upload(filePath, arrayBuffer, { contentType, upsert: false })
+
+        if (error) throw error
       }
-  
-      // Get public URL
+
       const { data: publicData } = supabase.storage
         .from("vehicle-images")
-        .getPublicUrl(filePath);
-  
-      return publicData.publicUrl;
-    } catch (err) {
-      console.error("Upload error:", err);
-      throw err;
-    }
-  };
+        .getPublicUrl(filePath)
 
-  const handleSubmit = async () => {
-    // Validation
-    if (!formData.make || !formData.model || !formData.year || !formData.pricePerDay || !formData.seats || !formData.totalQuantity) {
+      return publicData.publicUrl
+    } catch (err) {
+      console.error("Upload error:", err)
+      throw err
+    }
+  }
+
+  const validateForm = () => {
+    if (!formData.make || !formData.model || !formData.year || !formData.pricePerDay || !formData.seats) {
       Alert.alert("Error", "Please fill in all required fields")
-      return
+      return false
     }
 
     if (Number.parseInt(formData.seats) < 1 || Number.parseInt(formData.seats) > 50) {
       Alert.alert("Error", "Please enter a valid number of seats (1-50)")
-      return
+      return false
     }
 
-    if (Number.parseInt(formData.totalQuantity) < 1) {
-      Alert.alert("Error", "Total quantity must be at least 1")
-      return
+    // Validate color variants
+    const validVariants = colorVariants.filter(variant => variant.color.trim() !== "")
+    
+    if (validVariants.length === 0) {
+      Alert.alert("Error", "Please add at least one color variant")
+      return false
     }
 
-    if (Number.parseInt(formData.availableQuantity) > Number.parseInt(formData.totalQuantity)) {
-      Alert.alert("Error", "Available quantity cannot exceed total quantity")
-      return
+    for (let variant of validVariants) {
+      if (Number.parseInt(variant.totalQuantity) < 1) {
+        Alert.alert("Error", `Total quantity for ${variant.color} must be at least 1`)
+        return false
+      }
+      if (Number.parseInt(variant.availableQuantity) > Number.parseInt(variant.totalQuantity)) {
+        Alert.alert("Error", `Available quantity for ${variant.color} cannot exceed total quantity`)
+        return false
+      }
     }
 
+    return true
+  }
+
+  const handleSubmitPress = () => {
+    if (!validateForm()) return
+    setShowConfirmModal(true)
+  }
+
+  const handleSubmit = async () => {
+    setShowConfirmModal(false)
     setLoading(true)
 
     try {
-      let imageUrl = formData.imageUrl
+      // Get valid variants
+      const validVariants = colorVariants.filter(variant => variant.color.trim() !== "")
 
-      // Upload new image if selected
-      if (imageUri && imageUri !== formData.imageUrl) {
-        console.log('Uploading new image...');
-        try {
-          imageUrl = await uploadImage(imageUri)
-        } catch (uploadError) {
-          console.error('Image upload failed:', uploadError)
-          
-          // Ask user if they want to continue without image
-          const continueWithoutImage = await new Promise((resolve) => {
-            Alert.alert(
-              "Image Upload Failed",
-              `${uploadError.message}\n\nWould you like to save the vehicle without an image?`,
-              [
-                {
-                  text: "Cancel",
-                  style: "cancel",
-                  onPress: () => resolve(false)
-                },
-                {
-                  text: "Continue Without Image",
-                  onPress: () => resolve(true)
-                }
-              ]
-            )
-          })
-          
-          if (!continueWithoutImage) {
-            setLoading(false)
-            return
+      // Upload images for variants
+      const variantsWithImages = await Promise.all(
+        validVariants.map(async (variant) => {
+          let imageUrl = variant.imageUrl
+
+          if (variant.imageUri && variant.imageUri !== variant.imageUrl) {
+            try {
+              imageUrl = await uploadImage(variant.imageUri)
+            } catch (uploadError) {
+              console.error('Image upload failed for variant:', variant.color, uploadError)
+              // Continue without image for this variant
+            }
           }
-          
-          // Keep existing image URL or set to null
-          imageUrl = formData.imageUrl
-        }
-      }
+
+          return {
+            ...variant,
+            imageUrl
+          }
+        })
+      )
+
+      // Calculate total quantities across all variants
+      const totalQuantity = variantsWithImages.reduce((sum, variant) => 
+        sum + Number.parseInt(variant.totalQuantity), 0)
+      const availableQuantity = variantsWithImages.reduce((sum, variant) => 
+        sum + Number.parseInt(variant.availableQuantity), 0)
 
       const vehicleData = {
         make: formData.make,
@@ -196,41 +283,70 @@ export default function AddVehicleScreen({ navigation, route }) {
         mileage: formData.mileage ? Number.parseInt(formData.mileage) : null,
         description: formData.description,
         available: formData.available,
-        total_quantity: Number.parseInt(formData.totalQuantity),
-        available_quantity: Number.parseInt(formData.availableQuantity),
-        image_url: imageUrl,
+        total_quantity: totalQuantity,
+        available_quantity: availableQuantity,
+        image_url: variantsWithImages[0]?.imageUrl || null, // Use first variant's image as main image
         updated_at: new Date().toISOString(),
       }
 
-      console.log('Saving vehicle data:', vehicleData);
+      let vehicleId = editingVehicle?.id
 
       if (isEditing) {
+        // Update existing vehicle
         const { error } = await supabase
           .from('vehicles')
           .update(vehicleData)
           .eq('id', editingVehicle.id)
 
         if (error) {
-          console.error('Update error:', error);
+          console.error('Update error:', error)
           throw error
         }
 
-        Alert.alert("Success", "Vehicle updated successfully")
+        // Delete existing variants
+        await supabase
+          .from('vehicle_variants')
+          .delete()
+          .eq('vehicle_id', editingVehicle.id)
       } else {
+        // Create new vehicle
         vehicleData.created_at = new Date().toISOString()
         
-        const { error } = await supabase
+        const { data: newVehicle, error } = await supabase
           .from('vehicles')
           .insert([vehicleData])
+          .select()
+          .single()
 
         if (error) {
-          console.error('Insert error:', error);
+          console.error('Insert error:', error)
           throw error
         }
 
-        Alert.alert("Success", "Vehicle added successfully")
+        vehicleId = newVehicle.id
       }
 
+      // Insert variants
+      const variantInserts = variantsWithImages.map(variant => ({
+        vehicle_id: vehicleId,
+        color: variant.color,
+        image_url: variant.imageUrl,
+        total_quantity: Number.parseInt(variant.totalQuantity),
+        available_quantity: Number.parseInt(variant.availableQuantity),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }))
+
+      const { error: variantError } = await supabase
+        .from('vehicle_variants')
+        .insert(variantInserts)
+
+      if (variantError) {
+        console.error('Variant insert error:', variantError)
+        throw variantError
+      }
+
+      Alert.alert("Success", isEditing ? "Vehicle updated successfully" : "Vehicle added successfully")
       navigation.goBack()
     } catch (error) {
       console.error("Error saving vehicle:", error)
@@ -257,6 +373,85 @@ export default function AddVehicleScreen({ navigation, route }) {
     </View>
   )
 
+  const renderColorVariant = (variant, index) => (
+    <View key={variant.id} style={styles.variantCard}>
+      <View style={styles.variantHeader}>
+        <Text style={styles.variantTitle}>Color Variant {index + 1}</Text>
+        {colorVariants.length > 1 && (
+          <TouchableOpacity
+            style={styles.removeVariantButton}
+            onPress={() => handleRemoveVariant(variant.id)}
+          >
+            <Ionicons name="trash-outline" size={16} color="#ef4444" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Color and Image Row */}
+      <View style={[styles.inputRow, isWeb && styles.inputRowWeb]}>
+        <View style={[styles.inputGroup, { flex: 2 }]}>
+          <Text style={styles.label}>Color Name *</Text>
+          <TextInput
+            style={styles.input}
+            value={variant.color}
+            onChangeText={(text) => updateColorVariant(variant.id, 'color', text)}
+            placeholder="e.g., Pearl White, Midnight Black"
+            placeholderTextColor="#9ca3af"
+          />
+        </View>
+
+        <View style={[styles.inputGroup, { flex: 1 }]}>
+          <Text style={styles.label}>Image</Text>
+          <TouchableOpacity
+            style={styles.variantImageUpload}
+            onPress={() => pickImageForVariant(variant.id)}
+          >
+            {variant.imageUri ? (
+              <Image source={{ uri: variant.imageUri }} style={styles.variantImage} />
+            ) : (
+              <View style={styles.variantImagePlaceholder}>
+                <Ionicons name="camera" size={20} color="#9ca3af" />
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Quantity Row */}
+      <View style={[styles.inputRow, isWeb && styles.inputRowWeb]}>
+        <View style={[styles.inputGroup, styles.inputHalf]}>
+          <Text style={styles.label}>Total Quantity *</Text>
+          <TextInput
+            style={styles.input}
+            value={variant.totalQuantity}
+            onChangeText={(text) => {
+              updateColorVariant(variant.id, 'totalQuantity', text)
+              // Auto-adjust available quantity if it exceeds total
+              if (Number.parseInt(text) < Number.parseInt(variant.availableQuantity)) {
+                updateColorVariant(variant.id, 'availableQuantity', text)
+              }
+            }}
+            placeholder="e.g., 2"
+            placeholderTextColor="#9ca3af"
+            keyboardType="numeric"
+          />
+        </View>
+
+        <View style={[styles.inputGroup, styles.inputHalf]}>
+          <Text style={styles.label}>Available Quantity *</Text>
+          <TextInput
+            style={styles.input}
+            value={variant.availableQuantity}
+            onChangeText={(text) => updateColorVariant(variant.id, 'availableQuantity', text)}
+            placeholder="e.g., 2"
+            placeholderTextColor="#9ca3af"
+            keyboardType="numeric"
+          />
+        </View>
+      </View>
+    </View>
+  )
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -279,21 +474,6 @@ export default function AddVehicleScreen({ navigation, route }) {
         </View>
 
         <View style={[styles.form, isWeb && styles.formWeb]}>
-          {/* Image Upload Section */}
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Vehicle Image</Text>
-            <TouchableOpacity style={styles.imageUpload} onPress={pickImage}>
-              {imageUri ? (
-                <Image source={{ uri: imageUri }} style={styles.uploadedImage} />
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <Ionicons name="camera" size={40} color="#9ca3af" />
-                  <Text style={styles.imagePlaceholderText}>Tap to add image</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-
           {/* Basic Information */}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Basic Information</Text>
@@ -393,60 +573,27 @@ export default function AddVehicleScreen({ navigation, route }) {
                 numberOfLines={4}
               />
             </View>
-
-            <View style={styles.switchGroup}>
-              <Text style={styles.label}>Available for Rent</Text>
-              <Switch
-                value={formData.available}
-                onValueChange={(value) => setFormData({ ...formData, available: value })}
-                trackColor={{ false: "#e5e7eb", true: "#222" }}
-                thumbColor={formData.available ? "#fff" : "#f4f3f4"}
-              />
-            </View>
           </View>
 
-          {/* Inventory Management */}
+          {/* Color Variants */}
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Inventory Management</Text>
-            
-            <View style={[styles.inputRow, isWeb && styles.inputRowWeb]}>
-              <View style={[styles.inputGroup, styles.inputHalf]}>
-                <Text style={styles.label}>Total Quantity *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.totalQuantity}
-                  onChangeText={(text) => {
-                    setFormData({ ...formData, totalQuantity: text });
-                    // Auto-adjust available quantity if it exceeds total
-                    if (Number.parseInt(text) < Number.parseInt(formData.availableQuantity)) {
-                      setFormData(prev => ({ ...prev, totalQuantity: text, availableQuantity: text }));
-                    }
-                  }}
-                  placeholder="e.g., 3"
-                  placeholderTextColor="#9ca3af"
-                  keyboardType="numeric"
-                />
-                <Text style={styles.helpText}>How many units of this vehicle do you have?</Text>
+            <View style={styles.variantsHeader}>
+              <View style={styles.variantsHeaderContent}>
+                <Text style={styles.sectionTitle}>Color Variants</Text>
+                <Text style={styles.sectionSubtitle}>Add different color options for this vehicle</Text>
               </View>
-
-              <View style={[styles.inputGroup, styles.inputHalf]}>
-                <Text style={styles.label}>Available Quantity *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.availableQuantity}
-                  onChangeText={(text) => setFormData({ ...formData, availableQuantity: text })}
-                  placeholder="e.g., 2"
-                  placeholderTextColor="#9ca3af"
-                  keyboardType="numeric"
-                />
-                <Text style={styles.helpText}>How many are currently available for rent?</Text>
-              </View>
+              <TouchableOpacity style={styles.addVariantButton} onPress={addColorVariant}>
+                <Ionicons name="add" size={16} color="#222" />
+                <Text style={styles.addVariantText}>Add Variant</Text>
+              </TouchableOpacity>
             </View>
+
+            {colorVariants.map((variant, index) => renderColorVariant(variant, index))}
           </View>
 
           <TouchableOpacity
             style={[styles.submitButton, loading && styles.disabledButton]}
-            onPress={handleSubmit}
+            onPress={handleSubmitPress}
             disabled={loading}
           >
             <Text style={styles.submitButtonText}>
@@ -455,6 +602,35 @@ export default function AddVehicleScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Confirmation Modal */}
+      <ActionModal
+        visible={showConfirmModal}
+        type="confirm"
+        title={isEditing ? "Update Vehicle" : "Add Vehicle"}
+        message={isEditing 
+          ? "Are you sure you want to update this vehicle with the changes you made?" 
+          : "Are you sure you want to add this vehicle to your fleet?"
+        }
+        confirmText={isEditing ? "Update" : "Add"}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={handleSubmit}
+        loading={loading}
+      />
+
+      {/* Delete Variant Modal */}
+      <ActionModal
+        visible={showDeleteVariantModal}
+        type="delete"
+        title="Remove Color Variant"
+        message="Are you sure you want to remove this color variant? This action cannot be undone."
+        confirmText="Remove"
+        onClose={() => {
+          setShowDeleteVariantModal(false)
+          setVariantToDelete(null)
+        }}
+        onConfirm={confirmRemoveVariant}
+      />
     </SafeAreaView>
   )
 }
@@ -526,32 +702,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     letterSpacing: -0.5,
     color: '#222',
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
     marginBottom: 16,
-  },
-  imageUpload: {
-    width: "100%",
-    height: 200,
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderStyle: "dashed",
-  },
-  uploadedImage: {
-    width: "100%",
-    height: "100%",
-  },
-  imagePlaceholder: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  imagePlaceholderText: {
-    marginTop: 8,
-    color: "#9ca3af",
-    fontSize: 16,
-    fontWeight: '500',
   },
   inputRow: {
     flexDirection: "column",
@@ -585,12 +741,6 @@ const styles = StyleSheet.create({
     color: '#222',
     fontWeight: '500',
   },
-  helpText: {
-    fontSize: 11,
-    color: '#6b7280',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
   textArea: {
     height: 100,
     textAlignVertical: "top",
@@ -622,11 +772,75 @@ const styles = StyleSheet.create({
   selectedTypeButtonText: {
     color: 'white',
   },
-  switchGroup: {
+  // Color Variants Styles - Fixed Layout
+  variantsHeader: {
+    flexDirection: 'column',
+    marginBottom: 20,
+  },
+  variantsHeaderContent: {
+    marginBottom: 12,
+  },
+  addVariantButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    alignSelf: 'flex-start',
+    minWidth: 120,
+  },
+  addVariantText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#222',
+    marginLeft: 4,
+  },
+  variantCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  variantHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    marginBottom: 16,
+  },
+  variantTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  removeVariantButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: '#fef2f2',
+  },
+  variantImageUpload: {
+    width: '100%',
+    height: 60,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderStyle: 'dashed',
+  },
+  variantImage: {
+    width: '100%',
+    height: '100%',
+  },
+  variantImagePlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   submitButton: {
     backgroundColor: '#222',

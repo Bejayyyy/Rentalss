@@ -1,8 +1,13 @@
-import { registerRootComponent } from 'expo';
+import { registerRootComponent } from "expo";
+import React from "react";  // ✅ Needed
+import { useLayoutEffect } from "react"; // ✅ We'll use this for the polyfill
 
-import App from './App';
+import App from "./App";
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
+// ✅ Polyfill: map useInsertionEffect → useLayoutEffect
+if (typeof React.useInsertionEffect === "undefined") {
+  React.useInsertionEffect = useLayoutEffect;
+}
+
+// Register app
 registerRootComponent(App);

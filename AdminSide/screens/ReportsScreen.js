@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 
 import { supabase } from '../services/supabase';
+import BookingOverviewChart from '../components/BookingOverviewChart';
 
 export default function BookingsAnalyticsScreen() {
   const [bookings, setBookings] = useState([]);
@@ -72,10 +73,14 @@ export default function BookingsAnalyticsScreen() {
 
       // Calculate statistics
       const totalBookings = bookingsData?.length || 0;
-      const totalRevenue = bookingsData?.reduce((sum, booking) => sum + parseFloat(booking.total_price || 0), 0) || 0;
+      // ✅ Only completed bookings count towards revenue
+      const totalRevenue =bookingsData?.filter((b) => b.status === "completed")
+          .reduce((sum, booking) => sum + parseFloat(booking.total_price || 0), 0) || 0;     
       const averageBookingValue = totalBookings > 0 ? totalRevenue / totalBookings : 0;
+        
 
-      const statusCounts = bookingsData?.reduce((acc, booking) => {
+      const statusCounts =
+      bookingsData?.reduce((acc, booking) => {
         acc[booking.status] = (acc[booking.status] || 0) + 1;
         return acc;
       }, {}) || {};
@@ -200,61 +205,10 @@ export default function BookingsAnalyticsScreen() {
               </View>
             </View>
 
-            {/* Status Overview */}
-            <View style={styles.chartContainer}>
-              <Text style={styles.sectionTitle}>Booking Status Overview</Text>
-              <View style={styles.filterContainer}>
-                <FilterButton
-                  label="Monthly"
-                  isActive={timeFilter === 'monthly'}
-                  onPress={() => setTimeFilter('monthly')}
-                />
-                <FilterButton
-                  label="Weekly"
-                  isActive={timeFilter === 'weekly'}
-                  onPress={() => setTimeFilter('weekly')}
-                />
-                <FilterButton
-                  label="Today"
-                  isActive={timeFilter === 'today'}
-                  onPress={() => setTimeFilter('today')}
-                />
-              </View>
-              
-              {/* Status Grid */}
-              <View style={styles.statusGrid}>
-                <View style={styles.statusItem}>
-                  <View style={[styles.statusIndicator, { backgroundColor: '#f59e0b' }]} />
-                  <Text style={styles.statusLabel}>Pending</Text>
-                  <Text style={styles.statusValue}>{stats.pendingBookings}</Text>
-                </View>
-                <View style={styles.statusItem}>
-                  <View style={[styles.statusIndicator, { backgroundColor: '#10b981' }]} />
-                  <Text style={styles.statusLabel}>Confirmed</Text>
-                  <Text style={styles.statusValue}>{stats.confirmedBookings}</Text>
-                </View>
-                <View style={styles.statusItem}>
-                  <View style={[styles.statusIndicator, { backgroundColor: '#059669' }]} />
-                  <Text style={styles.statusLabel}>Completed</Text>
-                  <Text style={styles.statusValue}>{stats.completedBookings}</Text>
-                </View>
-                <View style={styles.statusItem}>
-                  <View style={[styles.statusIndicator, { backgroundColor: '#ef4444' }]} />
-                  <Text style={styles.statusLabel}>Cancelled</Text>
-                  <Text style={styles.statusValue}>{stats.cancelledBookings}</Text>
-                </View>
-              </View>
-            </View>
+            {/*Booking Overview */}
+            <BookingOverviewChart/>
 
-            {/* Recent Bookings Title */}
-            <View style={styles.trendingContainer}>
-              <View style={styles.trendingHeader}>
-                <Text style={styles.sectionTitle}>Recent Bookings</Text>
-                <Text style={styles.filterButton}>
-                  {bookings.length} {timeFilter === 'today' ? 'today' : `this ${timeFilter.slice(0, -2)}`}
-                </Text>
-              </View>
-            </View>
+           
           </>
         }
         renderItem={({ item }) => (
