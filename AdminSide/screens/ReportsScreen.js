@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, Image, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
-
-import { supabase } from '../services/supabase';
 import BookingOverviewChart from '../components/BookingOverviewChart';
+import RevenueOverviewChart from '../components/BookingScreen/RevenueOverviewChart';
+import VehicleAnalyticsChart from '../components/BookingScreen/VehicleAnalyticsChart';
+import { supabase } from '../services/supabase';
+
 
 export default function BookingsAnalyticsScreen() {
   const [bookings, setBookings] = useState([]);
@@ -74,7 +76,7 @@ export default function BookingsAnalyticsScreen() {
       // Calculate statistics
       const totalBookings = bookingsData?.length || 0;
       // ✅ Only completed bookings count towards revenue
-      const totalRevenue =bookingsData?.filter((b) => b.status === "completed")
+      const totalRevenue = bookingsData?.filter((b) => b.status === "completed")
           .reduce((sum, booking) => sum + parseFloat(booking.total_price || 0), 0) || 0;     
       const averageBookingValue = totalBookings > 0 ? totalRevenue / totalBookings : 0;
         
@@ -145,15 +147,6 @@ export default function BookingsAnalyticsScreen() {
     }
   };
 
-  const FilterButton = ({ label, isActive, onPress }) => (
-    <Text
-      style={[styles.filterButton, isActive && styles.filterButtonActive]}
-      onPress={onPress}
-    >
-      {label}
-    </Text>
-  );
-
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, styles.loadingContainer]}>
@@ -174,7 +167,6 @@ export default function BookingsAnalyticsScreen() {
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.headerTitle}>Bookings Analytics</Text>
-              
             </View>
 
             {/* Stats Cards */}
@@ -205,55 +197,20 @@ export default function BookingsAnalyticsScreen() {
               </View>
             </View>
 
-            {/*Booking Overview */}
-            <BookingOverviewChart/>
+            {/* Booking Overview Chart */}
+            <BookingOverviewChart />
+
+            {/* Revenue Overview Chart */}
+            <RevenueOverviewChart />
+
+            {/* Vehicle Analytics Chart */}
+            <VehicleAnalyticsChart />
 
            
           </>
         }
-        renderItem={({ item }) => (
-          <View style={styles.bookingItem}>
-            {item.vehicles?.image_url ? (
-              <Image source={{ uri: item.vehicles.image_url }} style={styles.vehicleImage} />
-            ) : (
-              <View style={[styles.vehicleImage, styles.placeholderImage]}>
-                <Ionicons name="car-outline" size={20} color="#9ca3af" />
-              </View>
-            )}
-            
-            <View style={styles.bookingInfo}>
-              <Text style={styles.vehicleName}>
-                {item.vehicles ? `${item.vehicles.year} ${item.vehicles.make} ${item.vehicles.model}` : 'Vehicle'}
-              </Text>
-              <Text style={styles.customerName}>{item.customer_name}</Text>
-              <Text style={styles.rentalDates}>
-                {formatDate(item.rental_start_date)} - {formatDate(item.rental_end_date)}
-              </Text>
-            </View>
-            
-            <View style={styles.bookingDetails}>
-              <Text style={styles.bookingPrice}>{formatCurrency(parseFloat(item.total_price))}</Text>
-              <View style={styles.statusContainer}>
-                {getStatusIcon(item.status)}
-                <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-                  {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="calendar-outline" size={48} color="#9ca3af" />
-            <Text style={styles.emptyTitle}>No Bookings Found</Text>
-            <Text style={styles.emptySubtitle}>
-              No bookings found for the selected time period.
-            </Text>
-          </View>
-        }
-        contentContainerStyle={styles.listContainer}
-        refreshing={loading}
-        onRefresh={fetchBookingsData}
+      
+        
       />
     </SafeAreaView>
   );
@@ -324,111 +281,17 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
   },
-  chartContainer: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  chartHeader: {
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+    marginTop: 8,
   },
   sectionTitle: {
     fontWeight: '800',
     fontSize: 18,
     letterSpacing: -0.5,
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-    marginTop: 12,
-  },
-  filterButton: {
-    fontSize: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 4,
-    backgroundColor: '#f3f4f6',
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  filterButtonActive: {
-    fontSize: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 4,
-    backgroundColor: 'black',
-    color: 'white',
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  statusGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'flex-end',
-  },
-  statusItem: {
-    flex: 1,
-    minWidth: '45%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    gap: 8,
-  },
-  statusIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  statusLabel: {
-    flex: 1,
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  statusValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  trendingContainer: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  trendingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
   },
   bookingItem: {
     flexDirection: 'row',

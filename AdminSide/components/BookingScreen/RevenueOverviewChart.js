@@ -10,9 +10,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path, Circle, Defs, LinearGradient, Stop } from "react-native-svg";
-import { supabase } from "../services/supabase";
+import { supabase } from "../../services/supabase";
 
-// screen width for scaling
 const { width } = Dimensions.get("window");
 
 const monthNames = [
@@ -20,14 +19,12 @@ const monthNames = [
   "July","August","September","October","November","December"
 ];
 
-export default function BookingOverviewChart() {
-  // filter states
-  const [overviewFilter, setOverviewFilter] = useState("Weekly");
+export default function RevenueOverviewChart() {
+  const [revenueFilter, setRevenueFilter] = useState("Weekly");
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedWeekRange, setSelectedWeekRange] = useState(null);
 
-  // dropdown modals
   const [yearDropdownVisible, setYearDropdownVisible] = useState(false);
   const [monthDropdownVisible, setMonthDropdownVisible] = useState(false);
   const [weekDropdownVisible, setWeekDropdownVisible] = useState(false);
@@ -35,8 +32,103 @@ export default function BookingOverviewChart() {
   const [chartData, setChartData] = useState([]);
 
   useEffect(() => {
-    fetchChartData();
-  }, [overviewFilter, selectedYear, selectedMonth, selectedWeekRange]);
+    fetchRevenueData();
+  }, [revenueFilter, selectedYear, selectedMonth, selectedWeekRange]);
+
+  const fetchRevenueData = async () => {
+    try {
+      let startDate, endDate;
+
+      if (revenueFilter === "Today") {
+        startDate = new Date(selectedYear, selectedMonth, new Date().getDate());
+        endDate = new Date(startDate);
+      } else if (revenueFilter === "Weekly") {
+        const now = new Date();
+        const firstDay = now.getDate() - now.getDay() + 1;
+        startDate = new Date(now.setDate(firstDay));
+        endDate = new Date(now.setDate(firstDay + 6));
+      } else if (revenueFilter === "Monthly") {
+        startDate = new Date(selectedYear, selectedMonth, 1);
+        endDate = new Date(selectedYear, selectedMonth + 1, 0);
+      } else {
+        startDate = new Date(selectedYear, 0, 1);
+        endDate = new Date(selectedYear, 11, 31);
+      }
+
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("*")
+        .eq("status", "completed")
+        .gte("rental_start_date", startDate.toISOString().split("T")[0])
+        .lte("rental_start_date", endDate.toISOString().split("T")[0]);
+
+      if (error) throw error;
+
+      let grouped = [];
+      if (revenueFilter === "Today") {
+        grouped = Array.from({ length: 24 }, (_, i) => ({
+          label: `${i}h`,
+          revenue: data
+            .filter((b) => new Date(b.rental_start_date).getHours() === i)
+            .reduce((sum, b) => sum + Number(b.total_price), 0),
+        }));
+      } else if (revenueFilter === "Weekly") {
+        const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        grouped = days.map((d, i) => {
+          const target = new Date(startDate);
+          target.setDate(startDate.getDate() + i);
+          const dayStr = target.toISOString().split("T")[0];
+
+          return {
+            label: d,
+            revenue: data
+              .filter((b) => b.rental_start_date === dayStr)
+              .reduce((sum, b) => sum + Number(b.total_price), 0),
+          };
+        });
+      } else if (revenueFilter === "Monthly") {
+        const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+        grouped = Array.from({ length: daysInMonth }, (_, i) => {
+          const dayStr = new Date(selectedYear, selectedMonth, i + 1)
+            .toISOString().split("T")[0];
+
+          return {
+            label: `${i + 1}`,
+            revenue: data
+              .filter((b) => b.rental_start_date === dayStr)
+              .reduce((sum, b) => sum + Number(b.total_price), 0),
+          };
+        });
+      } else {
+        grouped = monthNames.map((m, i) => {
+          return {
+            label: m.slice(0, 3),
+            revenue: data
+              .filter((b) => new Date(b.rental_start_date).getMonth() === i)
+              .reduce((sum, b) => sum + Number(b.total_price), 0),
+          };
+        });
+      }
+
+      setChartData(grouped);
+    } catch (err) {
+      console.error("Error fetching revenue data:", err);
+    }
+  };
+
+  const getTrendColor = () => {
+    if (chartData.length < 2) return "#6b7280";
+    const recent = chartData.slice(-2);
+    return recent[1].revenue > recent[0].revenue ? "#10b981" : "#ef4444";
+  };
+
+  const getTrendPercentage = () => {
+    if (chartData.length < 2) return "0%";
+    const recent = chartData.slice(-2);
+    if (recent[0].revenue === 0) return recent[1].revenue > 0 ? "+100%" : "0%";
+    const percentage = ((recent[1].revenue - recent[0].revenue) / recent[0].revenue) * 100;
+    return percentage > 0 ? `+${percentage.toFixed(1)}%` : `${percentage.toFixed(1)}%`;
+  };
 
   const getWeekRanges = () => {
     const year = selectedYear;
@@ -71,170 +163,53 @@ export default function BookingOverviewChart() {
     return weeks;
   };
 
-  // ✅ Real fetch from bookings
-  const fetchChartData = async () => {
-    try {
-      let startDate, endDate;
-
-      if (overviewFilter === "Today") {
-        startDate = new Date(selectedYear, selectedMonth, new Date().getDate());
-        endDate = new Date(startDate);
-      } else if (overviewFilter === "Weekly") {
-        if (selectedWeekRange) {
-          startDate = selectedWeekRange.start;
-          endDate = selectedWeekRange.end;
-        } else {
-          const now = new Date();
-          const firstDay = now.getDate() - now.getDay() + 1; // Monday
-          startDate = new Date(now.setDate(firstDay));
-          endDate = new Date(now.setDate(firstDay + 6));
-        }
-      } else if (overviewFilter === "Monthly") {
-        startDate = new Date(selectedYear, selectedMonth, 1);
-        endDate = new Date(selectedYear, selectedMonth + 1, 0);
-      } else {
-        // Yearly
-        startDate = new Date(selectedYear, 0, 1);
-        endDate = new Date(selectedYear, 11, 31);
-      }
-
-      // Query bookings from Supabase
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("*")
-        .gte("rental_start_date", startDate.toISOString().split("T")[0])
-        .lte("rental_start_date", endDate.toISOString().split("T")[0]);
-
-      if (error) throw error;
-
-      // Group bookings by filter
-      let grouped = [];
-      if (overviewFilter === "Today") {
-        grouped = Array.from({ length: 24 }, (_, i) => ({
-          label: `${i}h`,
-          bookings: data.filter(
-            (b) => new Date(b.rental_start_date).getHours() === i
-          ).length,
-        }));
-      } else if (overviewFilter === "Weekly") {
-        const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-        grouped = days.map((d, i) => {
-          const target = new Date(startDate);
-          target.setDate(startDate.getDate() + i);
-          const dayStr = target.toISOString().split("T")[0];
-
-          return {
-            label: d,
-            bookings: data.filter((b) => b.rental_start_date === dayStr).length,
-          };
-        });
-      } else if (overviewFilter === "Monthly") {
-        const daysInMonth = new Date(
-          selectedYear,
-          selectedMonth + 1,
-          0
-        ).getDate();
-        grouped = Array.from({ length: daysInMonth }, (_, i) => {
-          const dayStr = new Date(
-            selectedYear,
-            selectedMonth,
-            i + 1
-          ).toISOString().split("T")[0];
-
-          return {
-            label: `${i + 1}`,
-            bookings: data.filter((b) => b.rental_start_date === dayStr).length,
-          };
-        });
-      } else {
-        // Yearly
-        grouped = monthNames.map((m, i) => {
-          return {
-            label: m.slice(0, 3),
-            bookings: data.filter(
-              (b) => new Date(b.rental_start_date).getMonth() === i
-            ).length,
-          };
-        });
-      }
-
-      setChartData(grouped);
-    } catch (err) {
-      console.error("Error fetching chart data:", err);
-    }
-  };
-
-  const getTrendColor = () => {
-    if (chartData.length < 2) return "#6b7280";
-    const recent = chartData.slice(-2);
-    return recent[1].bookings > recent[0].bookings ? "#10b981" : "#ef4444";
-  };
-
-  const getTrendPercentage = () => {
-    if (chartData.length < 2) return "0%";
-    const recent = chartData.slice(-2);
-    if (recent[0].bookings === 0) return recent[1].bookings > 0 ? "+100%" : "0%";
-    const percentage =
-      ((recent[1].bookings - recent[0].bookings) / recent[0].bookings) * 100;
-    return percentage > 0
-      ? `+${percentage.toFixed(1)}%`
-      : `${percentage.toFixed(1)}%`;
-  };
-
-  // render line chart
   const renderLineChart = () => {
     if (chartData.length === 0) return null;
-  
-    const maxBookings = Math.max(...chartData.map((d) => d.bookings), 1);
+
+    const maxRevenue = Math.max(...chartData.map((d) => d.revenue), 1);
     const chartHeight = 140;
     const chartWidth = width - 64;
     const stepX = chartWidth / (chartData.length - 1);
-  
+
     const points = chartData.map((d, i) => {
       const x = i * stepX;
-      const y = chartHeight - (d.bookings / maxBookings) * chartHeight;
+      const y = chartHeight - (d.revenue / maxRevenue) * chartHeight;
       return { ...d, x, y };
     });
-  
+
     const pathData = points
       .map((p, i) => (i === 0 ? `M ${p.x},${p.y}` : `L ${p.x},${p.y}`))
       .join(" ");
-  
-    // Summary (removed revenue calculations)
-    const totalBookings = chartData.reduce((sum, d) => sum + d.bookings, 0);
-    const averageBookings = totalBookings / chartData.length;
+
+    const totalRevenue = chartData.reduce((sum, d) => sum + d.revenue, 0);
+    const averageRevenue = totalRevenue / chartData.length;
     const trendPercentage = getTrendPercentage();
-  
+
     return (
       <View style={styles.chartContainer}>
         <View style={{ flexDirection: "row" }}>
-          {/* Y-Axis labels */}
           <View style={styles.yAxis}>
-            <Text style={styles.yAxisLabel}>{maxBookings}</Text>
-            <Text style={styles.yAxisLabel}>{Math.floor(maxBookings / 2)}</Text>
-            <Text style={styles.yAxisLabel}>0</Text>
+            <Text style={styles.yAxisLabel}>₱{maxRevenue.toFixed(0)}</Text>
+            <Text style={styles.yAxisLabel}>₱{Math.floor(maxRevenue / 2)}</Text>
+            <Text style={styles.yAxisLabel}>₱0</Text>
           </View>
-  
-          {/* Chart */}
+
           <Svg height={chartHeight + 20} width={chartWidth}>
             <Defs>
-              <LinearGradient id="lineGradient" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={getTrendColor()} stopOpacity="1" />
-                <Stop offset="1" stopColor={getTrendColor()} stopOpacity="0.2" />
+              <LinearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor="#10b981" stopOpacity="1" />
+                <Stop offset="1" stopColor="#10b981" stopOpacity="0.2" />
               </LinearGradient>
             </Defs>
-  
-            {/* Line Path */}
-            <Path d={pathData} fill="none" stroke="url(#lineGradient)" strokeWidth={2} />
-  
-            {/* Points */}
+
+            <Path d={pathData} fill="none" stroke="url(#revenueGradient)" strokeWidth={3} />
+
             {points.map((p, i) => (
-              <Circle key={i} cx={p.x} cy={p.y} r={3} fill={getTrendColor()} />
+              <Circle key={i} cx={p.x} cy={p.y} r={4} fill="#10b981" />
             ))}
           </Svg>
         </View>
-  
-        {/* X-axis */}
+
         <View style={styles.xAxis}>
           {points.map((p, i) => (
             <Text key={i} style={styles.xAxisLabel}>
@@ -242,16 +217,15 @@ export default function BookingOverviewChart() {
             </Text>
           ))}
         </View>
-  
-        {/* Chart Stats - Removed Revenue */}
+
         <View style={styles.chartStats}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{totalBookings}</Text>
-            <Text style={styles.statLabel}>Total Bookings</Text>
+            <Text style={styles.statNumber}>₱{totalRevenue.toFixed(0)}</Text>
+            <Text style={styles.statLabel}>Total Revenue</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{averageBookings.toFixed(1)}</Text>
-            <Text style={styles.statLabel}>Avg Bookings</Text>
+            <Text style={styles.statNumber}>₱{averageRevenue.toFixed(0)}</Text>
+            <Text style={styles.statLabel}>Average Revenue</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, { color: getTrendColor() }]}>
@@ -263,33 +237,31 @@ export default function BookingOverviewChart() {
       </View>
     );
   };
-  
-  
+
   return (
     <View style={styles.summaryCard}>
       <View style={styles.cardHeader}>
-        <Text style={styles.sectionTitle}>Booking Overview</Text>
+        <Text style={styles.sectionTitle}>Revenue Overview</Text>
         <Text style={[styles.trendText, { color: getTrendColor() }]}>
           {getTrendPercentage()}
         </Text>
       </View>
 
-      {/* Primary Filters */}
       <View style={styles.overviewFilters}>
         <View style={styles.overviewFilterRow}>
           {["Today", "Weekly", "Monthly", "Yearly"].map((label) => (
             <TouchableOpacity
               key={label}
-              onPress={() => setOverviewFilter(label)}
+              onPress={() => setRevenueFilter(label)}
               style={[
                 styles.overviewFilterButton,
-                overviewFilter === label && styles.overviewFilterButtonActive,
+                revenueFilter === label && styles.overviewFilterButtonActive,
               ]}
             >
               <Text
                 style={[
                   styles.overviewFilterButtonText,
-                  overviewFilter === label && styles.overviewFilterButtonTextActive,
+                  revenueFilter === label && styles.overviewFilterButtonTextActive,
                 ]}
               >
                 {label}
@@ -298,7 +270,6 @@ export default function BookingOverviewChart() {
           ))}
         </View>
 
-        {/* Secondary Filters */}
         <View style={styles.secondaryFilterRow}>
           <TouchableOpacity
             style={styles.secondaryFilterButton}
@@ -308,7 +279,7 @@ export default function BookingOverviewChart() {
             <Ionicons name="chevron-down" size={14} color="#6b7280" />
           </TouchableOpacity>
 
-          {overviewFilter === "Monthly" && (
+          {revenueFilter === "Monthly" && (
             <TouchableOpacity
               style={styles.secondaryFilterButton}
               onPress={() => setMonthDropdownVisible(true)}
@@ -320,7 +291,7 @@ export default function BookingOverviewChart() {
             </TouchableOpacity>
           )}
 
-          {overviewFilter === "Weekly" && (
+          {revenueFilter === "Weekly" && (
             <TouchableOpacity
               style={styles.secondaryFilterButton}
               onPress={() => setWeekDropdownVisible(true)}
@@ -390,7 +361,7 @@ export default function BookingOverviewChart() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Week Dropdown - Fixed */}
+      {/* Week Dropdown */}
       <Modal visible={weekDropdownVisible} transparent animationType="fade">
         <TouchableOpacity 
           style={styles.modalOverlay}
@@ -459,7 +430,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#f3f4f6",
   },
-  overviewFilterButtonActive: { backgroundColor: "#3b82f6" },
+  overviewFilterButtonActive: { backgroundColor: "#10b981" },
   overviewFilterButtonText: {
     fontSize: 14,
     fontWeight: "600",
@@ -498,26 +469,6 @@ const styles = StyleSheet.create({
   },
   dropdownItem: { padding: 12 },
   dropdownText: { fontSize: 16, fontWeight: "500" },
-  chartStats: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 16,
-    paddingHorizontal: 8,
-  },
-  statItem: {
-    alignItems: "center",
-    flex: 1,
-  },
-  statNumber: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginTop: 2,
-  },
   chartContainer: {
     marginTop: 16,
   },
@@ -539,5 +490,25 @@ const styles = StyleSheet.create({
   xAxisLabel: {
     fontSize: 10,
     color: "#6b7280",
+  },
+  chartStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 16,
+    paddingHorizontal: 8,
+  },
+  statItem: {
+    alignItems: "center",
+    flex: 1,
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: 2,
   },
 });

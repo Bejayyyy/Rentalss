@@ -14,7 +14,8 @@ import calendarIcon from "./assets/iconscalendar.png"
 import supportIcon from "./assets/iconssupport.png"
 import BackgroundImage from "./assets/HeroPage/section_bg2.png"
 import bgContact from "./assets/ContactUs.jpg"
-import defaultBackground from "./assets/CarScreen/background.jpg"
+import defaultBackground from "./assets/CarScreen/background.jpg";
+
 
 /* ===========================
    ✅ Success/Error Toast
@@ -46,183 +47,182 @@ const Toast = ({ type, message, isVisible, onClose }) => {
     </div>
   )
 }
-/* ===========================
-   Details Modal
-   =========================== */
-   const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
-    const [variants, setVariants] = useState([]);
-    const [selectedVariant, setSelectedVariant] = useState(null);
-    const isRentButtonDisabled = !selectedVariant || Number(selectedVariant.available_quantity) === 0;
-    useEffect(() => {
-      const fetchVariants = async () => {
-        if (!car?.id) return;
-        const { data, error } = await supabase
-          .from("vehicle_variants")
-          .select("*")
-          .eq("vehicle_id", car.id);
-        if (!error) {
-          setVariants(data || []);
-          if (data && data.length > 0) {
-            setSelectedVariant(data[0]);
-          }
+
+const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
+  const [variants, setVariants] = useState([]);
+  const [selectedVariant, setSelectedVariant] = useState(null);
+  const isRentButtonDisabled =
+    !selectedVariant || Number(selectedVariant.available_quantity) === 0;
+
+  useEffect(() => {
+    const fetchVariants = async () => {
+      if (!car?.id) return;
+      const { data, error } = await supabase
+        .from("vehicle_variants")
+        .select("*")
+        .eq("vehicle_id", car.id);
+      if (!error) {
+        setVariants(data || []);
+        if (data && data.length > 0) {
+          setSelectedVariant(data[0]);
         }
-      };
-      if (isOpen) fetchVariants();
-    }, [isOpen, car]);
-  
-    if (!isOpen || !car) return null;
-  
-    const renderColorSwatch = (variant) => {
-      const colorName = variant.color.toLowerCase();
-      let bgColor = '#e5e7eb';
-      
-      if (colorName.includes('white') || colorName.includes('pearl')) bgColor = '#ffffff';
-      else if (colorName.includes('black') || colorName.includes('midnight')) bgColor = '#1f2937';
-      else if (colorName.includes('silver') || colorName.includes('metallic')) bgColor = '#9ca3af';
-      else if (colorName.includes('red')) bgColor = '#dc2626';
-      else if (colorName.includes('blue')) bgColor = '#2563eb';
-      else if (colorName.includes('gray') || colorName.includes('grey')) bgColor = '#6b7280';
-  
-      return (
-        <button
-          key={variant.id}
-          onClick={() => setSelectedVariant(variant)}
-          className={`w-12 h-12 rounded-full border-3 transition-all duration-200 hover:scale-110 ${
-            selectedVariant?.id === variant.id 
-              ? 'ring-4 ring-black ring-opacity-30 shadow-lg' 
-              : 'border-gray-300 hover:border-gray-400'
-          }`}
-          style={{ 
-            backgroundColor: bgColor,
-            border: bgColor === '#ffffff' ? '3px solid #e5e7eb' : '3px solid transparent'
-          }}
-          title={variant.color}
-        />
-      );
+      }
     };
-  
+    if (isOpen) fetchVariants();
+  }, [isOpen, car]);
+
+  if (!isOpen || !car) return null;
+
+  const renderColorSwatch = (variant) => {
+    const colorName = variant.color.toLowerCase();
+    let bgColor = "#e5e7eb";
+
+    if (colorName.includes("white") || colorName.includes("pearl"))
+      bgColor = "#ffffff";
+    else if (colorName.includes("black") || colorName.includes("midnight"))
+      bgColor = "#1f2937";
+    else if (colorName.includes("silver") || colorName.includes("metallic"))
+      bgColor = "#9ca3af";
+    else if (colorName.includes("red")) bgColor = "#dc2626";
+    else if (colorName.includes("blue")) bgColor = "#2563eb";
+    else if (colorName.includes("gray") || colorName.includes("grey"))
+      bgColor = "#6b7280";
+
+    const isSelected = selectedVariant?.id === variant.id;
+
     return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
-        <div className="bg-white rounded-3xl max-w-7xl w-full h-[90vh] overflow-hidden shadow-2xl">
-          <div className="flex h-full">
-            {/* LEFT SIDE - Image and Navigation */}
-            <div className="w-3/5 bg-gradient-to-br from-gray-900 via-gray-800 to-black relative overflow-hidden">
-              {/* Close Button */}
-              <button 
-                onClick={onClose}
-                className="absolute top-6 right-6 z-10 w-10 h-10 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all duration-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
-  
-              {/* Car Image */}
-              <div className="h-full flex items-center justify-center p-8">
-                <div className="relative w-full h-full max-w-4xl max-h-96">
-                  <img
-                    src={selectedVariant?.image_url || car.image_url || defaultBackground}
-                    alt={`${car.make} ${car.model}`}
-                    className="w-full h-full object-contain drop-shadow-2xl"
-                  />
+      <button
+        key={variant.id}
+        onClick={() => setSelectedVariant(variant)}
+        className={`rounded-full transition-all duration-200
+          ${isSelected ? "w-8 h-8 scale-125 shadow-md" : "w-6 h-6"}
+        `}
+        style={{
+          backgroundColor: bgColor,
+          border: bgColor === "#ffffff" ? "1px solid #e5e7eb" : "none",
+        }}
+        title={variant.color}
+      />
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+      <div className="bg-white rounded-3xl max-w-6xl w-full h-[90vh] overflow-hidden shadow-2xl flex flex-col lg:flex-row">
+        
+        {/* LEFT SIDE - Car Image with Background Image */}
+        <div
+          className="relative lg:w-3/5 w-full flex items-center justify-center p-6 bg-cover bg-center"
+          style={{
+            backgroundImage: `url(${defaultBackground})`,
+          }}
+        >
+     {/* Car Image */}
+     <div className="relative w-full max-w-2xl flex items-center justify-center">
+  <img
+    src={selectedVariant?.image_url || car.image_url || defaultBackground}
+    alt={`${car.make} ${car.model}`}
+    className="w-[600px] h-auto object-contain drop-shadow-2xl scale-110 mt-20"
+  />
+</div>
+{/* Color Variants */}
+<div className="absolute bottom-10 left-1/2 -translate-x-1/2">
+  <div className="flex gap-4 bg-white/30 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/100 shadow-lg">
+    {variants.map(renderColorSwatch)}
+  </div>
+</div>
+
+        </div>
+
+        {/* RIGHT SIDE - Car Details */}
+        <div className="relative lg:w-2/5 w-full flex flex-col p-8 overflow-y-auto">
+          
+          {/* Close Button (inside white panel, top-right) */}
+          <button
+            onClick={onClose}
+            className="absolute top-6 right-6 w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 hover:text-gray-900 transition-all duration-200"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {/* Car Header */}
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+              {car.make}
+              <span className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-600">
+                {car.year}
+              </span>
+            </h1>
+            <h2 className="text-xl font-light text-gray-700">{car.model}</h2>
+          </div>
+
+          {/* Specs */}
+          <div className="flex items-center gap-6 mb-6">
+            <div className="flex items-center gap-2 text-gray-600">
+              <Gauge className="w-5 h-5" />
+              <span className="text-lg font-medium">2393 CC</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-600">
+              <Users className="w-5 h-5" />
+              <span className="text-lg font-medium">{car.seats} Seater</span>
+            </div>
+          </div>
+
+          {/* Price */}
+          <div className="text-3xl font-bold text-gray-900 mb-6">
+            ₱{car.price_per_day?.toLocaleString()}
+            <span className="text-lg font-normal text-gray-500">/day</span>
+          </div>
+
+          {/* Description */}
+          <div className="flex-1 mb-6">
+            <p className="text-gray-600 leading-relaxed">
+              {car.description ||
+                "Experience luxury and performance with this premium vehicle. Perfect for business trips, special occasions, or when you simply want to enjoy the finest driving experience."}
+            </p>
+          </div>
+
+          {/* Selected Variant */}
+          {selectedVariant && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-gray-500 mb-1">Selected Color</div>
+                  <div className="font-semibold text-gray-900">{selectedVariant.color}</div>
                 </div>
-              </div>
-  
-              {/* Navigation Arrows */}
-              <button className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all duration-200">
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <button className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all duration-200">
-                <ChevronRight className="w-6 h-6" />
-              </button>
-  
-              {/* Color Variants */}
-              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4">
-                {variants.map(renderColorSwatch)}
+                <div className="text-right">
+                  <div className="text-sm text-gray-500 mb-1">Available</div>
+                  <div className="font-semibold text-gray-900">
+                    {selectedVariant.available_quantity} units
+                  </div>
+                </div>
               </div>
             </div>
-  
-            {/* RIGHT SIDE - Car Details */}
-            <div className="w-2/5 p-8 flex flex-col">
-              {/* Header */}
-              <div className="mb-8">
-                <div className="flex items-center gap-4 mb-4">
-                  <h1 className="text-4xl font-bold text-gray-900">
-                    {car.make}
-                  </h1>
-                  <div className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-600">
-                    {car.year}
-                  </div>
-                </div>
-                <h2 className="text-2xl font-light text-gray-700 mb-4">{car.model}</h2>
-                
-                {/* Specs */}
-                <div className="flex items-center gap-6 mb-6">
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Gauge className="w-5 h-5" />
-                    <span className="text-lg font-medium">2393 CC</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Users className="w-5 h-5" />
-                    <span className="text-lg font-medium">{car.seats} Seater</span>
-                  </div>
-                </div>
-  
-                {/* Price */}
-                <div className="text-3xl font-bold text-gray-900 mb-2">
-                  ₱{car.price_per_day?.toLocaleString()}<span className="text-lg font-normal text-gray-500">/day</span>
-                </div>
-              </div>
-  
-              {/* Description */}
-              <div className="flex-1 mb-8">
-                <p className="text-gray-600 leading-relaxed">
-                  {car.description || "Experience luxury and performance with this premium vehicle. Perfect for business trips, special occasions, or when you simply want to enjoy the finest driving experience."}
-                </p>
-              </div>
-  
-              {/* Selected Variant Info */}
-              {selectedVariant && (
-                <div className="mb-8 p-4 bg-gray-50 rounded-xl">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm text-gray-500 mb-1">Selected Color</div>
-                      <div className="font-semibold text-gray-900">{selectedVariant.color}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-500 mb-1">Available</div>
-                      <div className="font-semibold text-gray-900">{selectedVariant.available_quantity} units</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-  
-              {/* Rent Now Button */}
-              <button
-                onClick={() => {
-                  onClose();
-                  onRentClick(car, selectedVariant);
-                }}
-                disabled={isRentButtonDisabled}
-                className={`w-full py-4 rounded-2xl text-lg font-semibold shadow-lg transition-colors duration-200 ${
-                  isRentButtonDisabled 
-                    ? 'bg-gray-400 cursor-not-allowed' 
-                    : 'bg-black text-white hover:bg-gray-800 hover:shadow-xl'
-                }`}
-              >
-                {isRentButtonDisabled ? 'Fully Booked' : 'Rent Now'}
-              </button>
-            </div>
+          )}
+
+          {/* Rent Now Button */}
+          <div className="mt-auto">
+            <button
+              onClick={() => {
+                onClose();
+                onRentClick(car, selectedVariant);
+              }}
+              disabled={isRentButtonDisabled}
+              className={`w-full py-4 rounded-2xl text-lg font-semibold shadow-lg transition-colors duration-200 ${
+                isRentButtonDisabled
+                  ? "bg-gray-300 cursor-not-allowed"
+                  : "bg-black text-white hover:bg-gray-800 hover:shadow-xl"
+              }`}
+            >
+              {isRentButtonDisabled ? "Fully Booked" : "Rent Now"}
+            </button>
           </div>
         </div>
       </div>
-    );
-  };
-/* =========================================================
-   ✅ Rental Modal with Variants + Availability + Gov ID 🆕
-   ========================================================= */
-/* === Replace existing RentalModal with this === */
-/* =========================================================
-   ✅ Improved Rental Modal with Enhanced UI
-   ========================================================= */
+    </div>
+  );
+};
+
    const RentalModal = ({ isOpen, onClose, selectedCar, refreshBookings }) => {
     const [formData, setFormData] = useState({
       fullName: "",
@@ -244,8 +244,7 @@ const Toast = ({ type, message, isVisible, onClose }) => {
     const [toast, setToast] = useState({ type: "", message: "", isVisible: false });
     const [variantsLoading, setVariantsLoading] = useState(false);
   
-    const defaultBackground = 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800&h=600&fit=crop';
-  
+   
     useEffect(() => {
       document.body.style.overflow = isOpen ? "hidden" : "auto";
       return () => (document.body.style.overflow = "auto");
@@ -260,9 +259,16 @@ const Toast = ({ type, message, isVisible, onClose }) => {
           .from("vehicle_variants")
           .select("*")
           .eq("vehicle_id", selectedCar.id);
-  
+    
         if (!error && data) {
           setVariants(data);
+    
+          // ✅ Auto-select first available variant
+          const firstAvailable = data.find(v => Number(v.available_quantity) > 0);
+          if (firstAvailable) {
+            setSelectedVariant(firstAvailable);
+            setFormData((s) => ({ ...s, vehicleVariantId: firstAvailable.id }));
+          }
         } else {
           const mockVariants = [
             { id: 1, color: 'Pearl White', image_url: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800&h=600&fit=crop', available_quantity: 3 },
@@ -270,6 +276,13 @@ const Toast = ({ type, message, isVisible, onClose }) => {
             { id: 3, color: 'Silver Metallic', image_url: 'https://images.unsplash.com/photo-1502877338535-766e1452684a?w=800&h=600&fit=crop', available_quantity: 0 },
           ];
           setVariants(mockVariants);
+    
+          // ✅ Also auto-select mock first available
+          const firstAvailable = mockVariants.find(v => v.available_quantity > 0);
+          if (firstAvailable) {
+            setSelectedVariant(firstAvailable);
+            setFormData((s) => ({ ...s, vehicleVariantId: firstAvailable.id }));
+          }
         }
       } catch (err) {
         console.error('Error fetching variants:', err);
@@ -278,6 +291,7 @@ const Toast = ({ type, message, isVisible, onClose }) => {
         setVariantsLoading(false);
       }
     };
+    
   
     useEffect(() => {
       if (isOpen) refreshVariants();
@@ -394,12 +408,37 @@ const Toast = ({ type, message, isVisible, onClose }) => {
       const colorName = variant.color.toLowerCase();
       let bgColor = '#e5e7eb';
   
-      if (colorName.includes('white') || colorName.includes('pearl')) bgColor = '#ffffff';
-      else if (colorName.includes('black') || colorName.includes('midnight')) bgColor = '#1f2937';
-      else if (colorName.includes('silver') || colorName.includes('metallic')) bgColor = '#9ca3af';
-      else if (colorName.includes('red')) bgColor = '#dc2626';
-      else if (colorName.includes('blue')) bgColor = '#2563eb';
-      else if (colorName.includes('gray') || colorName.includes('grey')) bgColor = '#6b7280';
+      if (colorName.includes('white') || colorName.includes('pearl') || colorName.includes('ivory') || colorName.includes('cream')) 
+        bgColor = '#ffffff';
+    else if (colorName.includes('black') || colorName.includes('midnight') || colorName.includes('jet') || colorName.includes('onyx')) 
+        bgColor = '#1f2937';
+    else if (colorName.includes('silver') || colorName.includes('metallic') || colorName.includes('platinum')) 
+        bgColor = '#9ca3af';
+    else if (colorName.includes('red') || colorName.includes('crimson') || colorName.includes('maroon') || colorName.includes('burgundy')) 
+        bgColor = '#dc2626';
+    else if (colorName.includes('blue') || colorName.includes('navy') || colorName.includes('royal') || colorName.includes('sky')) 
+        bgColor = '#2563eb';
+    else if (colorName.includes('gray') || colorName.includes('grey') || colorName.includes('charcoal') || colorName.includes('ash')) 
+        bgColor = '#6b7280';
+    else if (colorName.includes('green') || colorName.includes('forest') || colorName.includes('olive') || colorName.includes('lime')) 
+        bgColor = '#16a34a';
+    else if (colorName.includes('yellow') || colorName.includes('gold') || colorName.includes('amber')) 
+        bgColor = '#facc15';
+    else if (colorName.includes('orange') || colorName.includes('tangerine') || colorName.includes('copper')) 
+        bgColor = '#f97316';
+    else if (colorName.includes('brown') || colorName.includes('chocolate') || colorName.includes('tan') || colorName.includes('beige')) 
+        bgColor = '#7c4a31';
+    else if (colorName.includes('purple') || colorName.includes('violet') || colorName.includes('lavender')) 
+        bgColor = '#8b5cf6';
+    else if (colorName.includes('pink') || colorName.includes('rose') || colorName.includes('magenta')) 
+        bgColor = '#ec4899';
+    else if (colorName.includes('cyan') || colorName.includes('teal') || colorName.includes('aqua')) 
+        bgColor = '#06b6d4';
+    else if (colorName.includes('bronze') || colorName.includes('copper')) 
+        bgColor = '#b87333';
+    else 
+        bgColor = '#d1d5db'; // fallback/unknown color
+    
   
       const isSelected = selectedVariant?.id === variant.id;
       const isUnavailable = Number(variant.available_quantity) === 0;
@@ -458,58 +497,103 @@ const Toast = ({ type, message, isVisible, onClose }) => {
       <>
         <Toast {...toast} onClose={hideToast} />
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-7xl w-full max-h-[95vh] overflow-y-auto shadow-2xl">
+          <div className="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100  rounded-2xl max-w-7xl w-full max-h-[95vh] overflow-y-auto shadow-2xl">
             <div className="flex flex-col lg:flex-row min-h-[700px]">
-              <div className="lg:w-2/5 bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 p-8 flex flex-col">
-                <div className="flex-1 flex items-center justify-center mb-8">
-                  <div className="w-full h-80 lg:h-96 bg-white rounded-3xl shadow-lg flex items-center justify-center overflow-hidden border border-gray-100">
+            <div className="lg:w-2/5 bg-white p-5 flex flex-col">
+            <div className="flex items-center justify-center mt-20">
+                <div className="w-full h-80 lg:h-96 rounded-3xl shadow-lg flex items-center justify-center overflow-hidden border border-gray-100 relative">
+                  {/* Default background image */}
+                  <img
+                    src={defaultBackground}
+                    
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+
+                  {/* Car image on top */}
+                  {selectedVariant?.image_url || displayCar?.image_url ? (
                     <img
-                      src={selectedVariant?.image_url || displayCar?.image_url || defaultBackground}
+                      src={selectedVariant?.image_url || displayCar?.image_url}
                       alt={`${displayCar?.make} ${displayCar?.model}`}
-                      className="object-contain w-full h-full p-6"
+                      className="relative object-contain w-full h-full p-6 mt-20"
                     />
-                  </div>
+                  ) : null}
                 </div>
-                <div className="mb-8 text-center lg:text-left">
-                  <h3 className="text-3xl font-bold text-gray-900 mb-3">
-                    {displayCar?.make} {displayCar?.model}
-                  </h3>
-                  <div className="flex items-center justify-center lg:justify-start gap-6 text-sm text-gray-600 mb-4">
-                    <span className="flex items-center gap-2 bg-white px-3 py-2 rounded-full shadow-sm">
-                      <Calendar className="w-4 h-4 text-gray-400" />
-                      {displayCar?.year}
-                    </span>
-                    <span className="flex items-center gap-2 bg-white px-3 py-2 rounded-full shadow-sm">
-                      <Car className="w-4 h-4 text-gray-400" />
-                      {displayCar?.seats} seats
-                    </span>
-                  </div>
-                  <div className="text-3xl font-bold text-emerald-600 mb-2">
-                    ₱{displayCar?.price_per_day?.toLocaleString()}
-                    <span className="text-lg font-normal text-gray-500 ml-1">/day</span>
-                  </div>
+
                 </div>
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                  <h4 className="text-xl font-bold text-gray-900 mb-5 flex items-center gap-3">
-                    <div className="w-2 h-2 bg-black rounded-full"></div>
-                    Choose Your Color
-                  </h4>
-                  {variantsLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
-                      <span className="ml-3 text-gray-600">Loading color options...</span>
-                    </div>
-                  ) : variants.length === 0 ? (
-                    <div className="text-center py-6 text-gray-500">
-                      No color variants available
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-4">
-                      {variants.map(renderVariantSwatch)}
-                    </div>
-                  )}
-                </div>
-              </div>
+ {/* Selected Color Title */}
+<div className="text-center mt-5 lg:text-left mb-2">
+  <span className="text-sm text-gray-700 font-medium">Color:</span>{" "}
+  <span className="font-semibold text-gray-900">
+    {selectedVariant?.color || "Unavailable"}
+  </span>
+</div>
+
+{/* Color Selection */}
+<div className="flex gap-3 justify-center lg:justify-start">
+  {variants.map((variant) => {
+    const colorName = variant.color?.toLowerCase() || "";
+    let bgColor = "#e5e7eb";
+
+    if (colorName.includes("white") || colorName.includes("pearl"))
+      bgColor = "#ffffff";
+    else if (colorName.includes("black") || colorName.includes("midnight"))
+      bgColor = "#1f2937";
+    else if (colorName.includes("silver") || colorName.includes("metallic"))
+      bgColor = "#9ca3af";
+    else if (colorName.includes("red")) bgColor = "#fca5a5"; // soft pink-red
+    else if (colorName.includes("blue")) bgColor = "#2563eb"; // whale blue
+    else if (colorName.includes("beige")) bgColor = "#e5decf";
+    else if (colorName.includes("gold") || colorName.includes("brown"))
+      bgColor = "#d1a054";
+
+    const isSelected = selectedVariant?.id === variant.id;
+    const isUnavailable = Number(variant.available_quantity) === 0;
+
+    return (
+      <div key={variant.id} className="relative">
+        <button
+          onClick={() => !isUnavailable && handleVariantSelect(variant)}
+          disabled={isUnavailable}
+          className={`w-7 h-7 rounded-full border-4 border-black-100
+            ${isSelected ? "ring-2 ring-white" : ""}
+            ${isUnavailable ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+          `}
+          style={{
+            backgroundColor: bgColor,
+          }}
+          title={variant.color}
+        />
+        {/* Slash line for unavailable */}
+        {isUnavailable && (
+          <span className="absolute left-1/2 top-1/2 w-8 h-[2px] bg-red-400 rotate-50 -translate-x-1/2 -translate-y-1/2 pointer-events-none"></span>
+        )}
+      </div>
+    );
+  })}
+</div>
+
+
+{/* Car Details */}
+<div className="mt-4 text-center lg:text-left text-gray-900">
+  <h3 className="text-3xl font-bold mb-3">
+    {displayCar?.make} {displayCar?.model}
+  </h3>
+  <div className="flex items-center justify-center lg:justify-start gap-4 text-sm text-gray-600 mb-3">
+    <span className="flex items-center gap-2 bg-white px-3 py-1 rounded-full shadow">
+      <Calendar className="w-4 h-4 text-gray-400" />
+      {displayCar?.year}
+    </span>
+    <span className="flex items-center gap-2 bg-white px-3 py-1 rounded-full shadow">
+      <Car className="w-4 h-4 text-gray-400" />
+      {displayCar?.seats} seats
+    </span>
+  </div>
+  <div className="text-3xl font-bold text-emerald-600">
+    ₱{displayCar?.price_per_day?.toLocaleString()}
+    <span className="text-lg font-normal text-gray-500 ml-1">/day</span>
+  </div>
+</div>
+</div>
               <div className="lg:w-3/5 p-8">
                 <div className="flex items-center justify-between mb-8">
                   <h2 className="text-3xl font-bold text-gray-900">Complete Your Booking</h2>
@@ -633,26 +717,36 @@ const Toast = ({ type, message, isVisible, onClose }) => {
                       Identity Verification
                     </h3>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-3">Upload Government ID *</label>
-                      <div className="border-3 border-dashed border-gray-300 rounded-2xl p-8 text-center hover:border-purple-400 hover:bg-white transition-all duration-300 bg-white/50">
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg"
-                          onChange={handleFileChange}
-                          className="hidden"
-                          id="govId"
-                        />
-                        <label htmlFor="govId" className="cursor-pointer block">
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">Upload Government ID *</label>
+                    <div className="border-3 border-dashed border-gray-300 rounded-2xl p-8 text-center hover:border-purple-400 hover:bg-white transition-all duration-300 bg-white/50">
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg"
+                        onChange={handleFileChange}
+                        className="hidden"
+                        id="govId"
+                      />
+                      <label htmlFor="govId" className="cursor-pointer block">
+                        {govIdPreview ? (
+                          <img
+                            src={govIdPreview}
+                            alt="ID Preview"
+                            className="mx-auto mb-4 max-h-40 rounded-2xl object-contain shadow-md"
+                          />
+                        ) : (
                           <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                             <Upload className="w-8 h-8 text-purple-600" />
                           </div>
-                          <p className="text-lg font-medium text-gray-700 mb-2">Click to upload your ID</p>
-                          <p className="text-sm text-gray-500">
-                            {govIdFile ? govIdFile.name : "JPEG or PNG (Max 5MB)"}
-                          </p>
-                        </label>
-                      </div>
+                        )}
+                        <p className="text-lg font-medium text-gray-700 mb-2">
+                          {govIdPreview ? "Click to change your ID" : "Click to upload your ID"}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          JPEG or PNG (Max 5MB)
+                        </p>
+                      </label>
                     </div>
+                  </div>
                   </div>
                   <div className="flex justify-between items-center bg-gray-100 p-6 rounded-2xl border border-gray-200">
                     <div>
@@ -664,14 +758,16 @@ const Toast = ({ type, message, isVisible, onClose }) => {
                     <button
                       type="submit"
                       disabled={isSubmitting || !selectedVariant || Number(selectedVariant?.available_quantity) === 0}
-                      className={`px-8 py-4 rounded-full text-lg font-bold transition-all duration-300 transform hover:scale-105 ${
-                        isSubmitting || !selectedVariant || Number(selectedVariant?.available_quantity) === 0
-                          ? 'bg-gray-400 cursor-not-allowed'
-                          : 'bg-black text-white hover:bg-gray-800 shadow-lg'
-                      }`}
+                      className={`px-8 py-4 rounded-2xl text-lg font-bold transition-all duration-300 transform
+                        ${
+                          isSubmitting || !selectedVariant || Number(selectedVariant?.available_quantity) === 0
+                            ? 'bg-gray-900 text-white cursor-not-allowed opacity-60'
+                            : 'bg-black text-white cursor-pointer hover:bg-gray-800 shadow-lg hover:scale-105'
+                        }`}
                     >
                       {isSubmitting ? "Submitting..." : "Confirm Booking"}
                     </button>
+
                   </div>
                 </form>
               </div>
@@ -736,8 +832,8 @@ const Navbar = ({ onRentClick, scrollToSection, refs }) => {
               {active === "cars" && <span className="absolute left-0 -bottom-1 w-full h-0.5 bg-black rounded" />}
             </button>
             <button
-              onClick={onRentClick}
-              className="bg-black text-white px-6 py-3 rounded-full font-medium hover:bg-gray-800 transition-transform transform hover:scale-105"
+              onClick={() => handleScroll(refs.fleetRef, "cars")}
+              className="bg-black text-white px-6 py-3 rounded-full font-medium hover:bg-gray-800 transition-transform transform hover:scale-105 cursor-pointer"
             >
               Rent Now
             </button>
@@ -1071,7 +1167,7 @@ const CarCard = ({ car, onRentClick, onOpenDetails }) => {
 
   return (
     <div
-      className="rounded-xl shadow-lg p-4 hover:shadow-xl cursor-pointer"
+      className="rounded-xl shadow-lg p-0 hover:shadow-xl cursor-pointer "
       onClick={() => onOpenDetails(car)}
     >
       <div className="relative h-64 w-full">
@@ -1079,7 +1175,7 @@ const CarCard = ({ car, onRentClick, onOpenDetails }) => {
         <img
           src={defaultBackground}
           alt="Default background"
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full   object-cover"
         />
         
         {/* Car image on top of background */}
@@ -1161,23 +1257,26 @@ const CarCard = ({ car, onRentClick, onOpenDetails }) => {
               </>
             )}
           </div>
-          {car.description && (
-            <p className="text-sm text-gray-600 mt-2 line-clamp-2">{car.description}</p>
-          )}
+      
         </div>
 
         <div className="flex gap-3">
           {/* Rent Now → directly opens rental form */}
           <button
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              onRentClick(car); 
+            onClick={(e) => {
+              e.stopPropagation();
+              onRentClick(car);
             }}
             disabled={!isActuallyAvailable || isLoading}
-            className="flex-1 py-3 px-4 rounded-lg font-medium transition-colors bg-black text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors
+              ${!isActuallyAvailable || isLoading 
+                ? 'bg-gray-400 text-white cursor-not-allowed opacity-50'
+                : 'bg-black text-white cursor-pointer hover:bg-gray-900'
+              }`}
           >
             Rent Now
           </button>
+
 
           {/* Details → opens details modal */}
           <button
@@ -1185,7 +1284,7 @@ const CarCard = ({ car, onRentClick, onOpenDetails }) => {
               e.stopPropagation();
               onOpenDetails?.(car);
             }}
-            className="flex-1 py-3 px-4 border rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex-1 py-3 px-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
           >
             Details
           </button>

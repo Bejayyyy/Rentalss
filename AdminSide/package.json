@@ -31,6 +31,7 @@
     "react-native-svg": "15.11.2",
     "react-native-url-polyfill": "^2.0.0",
     "react-native-web": "^0.20.0",
+    "use-debounce": "^10.0.6",
     "xdate": "^0.8.3"
   },
   "devDependencies": {

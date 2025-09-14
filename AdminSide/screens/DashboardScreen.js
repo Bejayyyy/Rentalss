@@ -88,6 +88,14 @@ const NotificationItem = ({ notification, onMarkRead, onRemove }) => {
         return { name: 'today', color: '#2196F3' };
       case 'return_today':
         return { name: 'calendar-today', color: '#9C27B0' };
+      case 'new_booking':
+        return { name: 'add-circle', color: '#FF6B35' };
+      case 'booking_confirmed':
+        return { name: 'checkmark-circle', color: '#10b981' };
+      case 'booking_completed':
+        return { name: 'flag', color: '#3b82f6' };
+      case 'status_change':
+        return { name: 'swap-horizontal', color: '#8b5cf6' };
       default:
         return { name: 'information-circle', color: '#666' };
     }
@@ -258,19 +266,51 @@ export default function DashboardScreen({ navigation }) {
   });
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
-  const [dismissedNotifications, setDismissedNotifications] = useState(new Set());
   const [showNotifications, setShowNotifications] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
-  // Generate notifications based on booking data, respecting user actions
-  const generateNotifications = (bookings, existingNotifications, dismissed) => {
-    const newNotifs = [];
+  // Get current user
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUserId(user?.id);
+    };
+    getCurrentUser();
+  }, []);
+
+  // Create notification in database
+  const createNotification = async (notificationData) => {
+    if (!currentUserId) return;
+
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: currentUserId,
+          booking_id: notificationData.bookingId,
+          title: notificationData.title,
+          message: notificationData.message,
+          type: notificationData.type,
+          read: false,
+          dismissed: false
+        });
+
+      if (error) {
+        console.error('Error creating notification:', error);
+      }
+    } catch (err) {
+      console.error('Error creating notification:', err);
+    }
+  };
+
+  // Generate notifications based on booking data
+  const generateNotifications = async (bookings) => {
+    if (!currentUserId) return;
+
     const today = new Date();
-    
-    // Create a map of existing notifications for quick lookup
-    const existingMap = new Map(existingNotifications.map(n => [n.id, n]));
-    
-    bookings.forEach(booking => {
-      
+    const notificationPromises = [];
+
+    for (const booking of bookings) {
       const startDate = new Date(booking.rental_start_date);
       const endDate = new Date(booking.rental_end_date);
       const timeDiff = startDate.getTime() - today.getTime();
@@ -278,144 +318,155 @@ export default function DashboardScreen({ navigation }) {
       const endTimeDiff = endDate.getTime() - today.getTime();
       const endDaysDiff = Math.ceil(endTimeDiff / (1000 * 3600 * 24));
 
-      const notificationConfigs = [];
+      // Check if notifications already exist for this booking to avoid duplicates
+      const { data: existingNotifications } = await supabase
+        .from('notifications')
+        .select('id, type')
+        .eq('booking_id', booking.id)
+        .eq('user_id', currentUserId)
+        .eq('dismissed', false);
 
-      // Pickup notifications
-      if (daysDiff === 0) {
-        notificationConfigs.push({
-          id: `pickup-today-${booking.id}`,
-          type: 'pickup_today',
-          title: 'Vehicle pickup today!',
-          message: `${booking.customer_name} is picking up ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model} today`,
-          timeAgo: 'Today',
-          priority: 'high'
-        });
-      } else if (daysDiff > 1 && daysDiff <= 3) {
-        notificationConfigs.push({
-          id: `pickup-upcoming-${booking.id}`,
-          type: 'upcoming_pickup',
-          title: `Vehicle pickup in ${daysDiff} days`,
-          message: `${booking.customer_name} will pick up ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model}`,
-          timeAgo: `${daysDiff} days`,
-          priority: 'low'
-        });
-      }
+      const existingTypes = new Set(existingNotifications?.map(n => n.type) || []);
 
-      // Always check status
-        if (booking.status === 'pending') {
-          notificationConfigs.push({
-            id: `pending-${booking.id}`,
-            type: 'new_booking',
-            title: 'New Booking Request',
-            message: `${booking.customer_name} requested ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model}`,
-            timeAgo: 'Just now',
-            priority: 'high'
-          });
-        } else if (booking.status === 'confirmed') {
-            if (daysDiff === 1) {
-            notificationConfigs.push({
-              id: `pickup-tomorrow-${booking.id}`,
-              type: 'upcoming_pickup',
-              title: 'Vehicle pickup tomorrow',
-              message: `${booking.customer_name} will pick up ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model} tomorrow`,
-              timeAgo: 'Tomorrow',
-              priority: 'medium'
-            });
-          }
-          notificationConfigs.push({
-            id: `confirmed-${booking.id}`,
-            type: 'booking_confirmed',
-            title: 'Booking Confirmed',
-            message: `${booking.customer_name}'s booking for ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model} is now confirmed`,
-            timeAgo: 'Just now',
-            priority: 'high'
-          });
-        }
-        else if (booking.status === 'completed') {
-          notificationConfigs.push({
-            id: `completed-${booking.id}`,
-            type: 'booking_completed',
-            title: 'Booking completed',
-            message: `${booking.customer_name}'s booking for ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model} is now completed`,
-            timeAgo: 'Just now',
-            priority: 'high'
-          });
-        }
-      // Return notifications
-      if (endDaysDiff === 0) {
-        notificationConfigs.push({
-          id: `return-today-${booking.id}`,
-          type: 'return_today',
-          title: 'Vehicle return due today!',
-          message: `${booking.customer_name} should return ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model} today`,
-          timeAgo: 'Today',
-          priority: 'high'
-        });
-      } else if (endDaysDiff === 1) {
-        notificationConfigs.push({
-          id: `return-tomorrow-${booking.id}`,
-          type: 'due_return',
-          title: 'Vehicle return due tomorrow',
-          message: `${booking.customer_name} should return ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model} tomorrow`,
-          timeAgo: 'Tomorrow',
-          priority: 'medium'
-        });
-      } else if (endDaysDiff < 0) {
-        const overdueDays = Math.abs(endDaysDiff);
-        notificationConfigs.push({
-          id: `overdue-${booking.id}`,
-          type: 'overdue',
-          title: 'Vehicle overdue!',
-          message: `${booking.customer_name} is ${overdueDays} day${overdueDays > 1 ? 's' : ''} overdue returning ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model}`,
-          timeAgo: `${overdueDays} days overdue`,
-          priority: 'critical'
-        });
-      } else if (endDaysDiff > 1 && endDaysDiff <= 3) {
-        notificationConfigs.push({
-          id: `return-upcoming-${booking.id}`,
-          type: 'due_return',
-          title: `Vehicle return in ${endDaysDiff} days`,
-          message: `${booking.customer_name} should return ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model}`,
-          timeAgo: `${endDaysDiff} days`,
-          priority: 'low'
-        });
-      }
-
-      // Process each notification config
-      notificationConfigs.forEach(config => {
-        // Skip if this notification was dismissed
-        if (dismissed.has(config.id)) return;
-
-        // If notification already exists, preserve its read status
-        const existing = existingMap.get(config.id);
-        if (existing) {
-          newNotifs.push({
-            ...config,
-            read: existing.read,
-            bookingId: booking.id
-          });
-        } else {
-          // New notification, mark as unread
-          newNotifs.push({
-            ...config,
-            read: false,
+      // Pickup notifications (only for confirmed bookings)
+      if (booking.status === 'confirmed') {
+        if (daysDiff === 0 && !existingTypes.has('pickup_today')) {
+          notificationPromises.push(createNotification({
             bookingId: booking.id,
-            createdAt: new Date(booking.created_at).getTime()
-          });
+            type: 'pickup_today',
+            title: 'Vehicle pickup today!',
+            message: `${booking.customer_name} is picking up ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model} today`
+          }));
+        } else if (daysDiff === 1 && !existingTypes.has('pickup_tomorrow')) {
+          notificationPromises.push(createNotification({
+            bookingId: booking.id,
+            type: 'pickup_tomorrow',
+            title: 'Vehicle pickup tomorrow',
+            message: `${booking.customer_name} will pick up ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model} tomorrow`
+          }));
+        } else if (daysDiff > 1 && daysDiff <= 3 && !existingTypes.has('upcoming_pickup')) {
+          notificationPromises.push(createNotification({
+            bookingId: booking.id,
+            type: 'upcoming_pickup',
+            title: `Vehicle pickup in ${daysDiff} days`,
+            message: `${booking.customer_name} will pick up ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model}`
+          }));
         }
-      });
-    });
-
-      // Sort by priority, then newest first
-    const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
-    return newNotifs.sort((a, b) => {
-      if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
-        return priorityOrder[a.priority] - priorityOrder[b.priority];
       }
-      return b.createdAt - a.createdAt; // 🔹 newest first
-    });
-    
 
+      // Status-based notifications
+      if (booking.status === 'pending' && !existingTypes.has('new_booking')) {
+        notificationPromises.push(createNotification({
+          bookingId: booking.id,
+          type: 'new_booking',
+          title: 'New Booking Request',
+          message: `${booking.customer_name} requested ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model}`
+        }));
+      }
+
+      // Return notifications (for confirmed and active bookings)
+      if (booking.status === 'confirmed') {
+        if (endDaysDiff === 0 && !existingTypes.has('return_today')) {
+          notificationPromises.push(createNotification({
+            bookingId: booking.id,
+            type: 'return_today',
+            title: 'Vehicle return due today!',
+            message: `${booking.customer_name} should return ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model} today`
+          }));
+        } else if (endDaysDiff === 1 && !existingTypes.has('return_tomorrow')) {
+          notificationPromises.push(createNotification({
+            bookingId: booking.id,
+            type: 'return_tomorrow',
+            title: 'Vehicle return due tomorrow',
+            message: `${booking.customer_name} should return ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model} tomorrow`
+          }));
+        } else if (endDaysDiff < 0 && !existingTypes.has('overdue')) {
+          const overdueDays = Math.abs(endDaysDiff);
+          notificationPromises.push(createNotification({
+            bookingId: booking.id,
+            type: 'overdue',
+            title: 'Vehicle overdue!',
+            message: `${booking.customer_name} is ${overdueDays} day${overdueDays > 1 ? 's' : ''} overdue returning ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model}`
+          }));
+        } else if (endDaysDiff > 1 && endDaysDiff <= 3 && !existingTypes.has('return_upcoming')) {
+          notificationPromises.push(createNotification({
+            bookingId: booking.id,
+            type: 'return_upcoming',
+            title: `Vehicle return in ${endDaysDiff} days`,
+            message: `${booking.customer_name} should return ${booking.vehicles?.year} ${booking.vehicles?.make} ${booking.vehicles?.model}`
+          }));
+        }
+      }
+    }
+
+    // Wait for all notifications to be created
+    await Promise.all(notificationPromises);
+    
+    // Fetch updated notifications from database
+    await fetchNotifications();
+  };
+
+  // Fetch notifications from database
+  const fetchNotifications = async () => {
+    if (!currentUserId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select(`
+          id,
+          title,
+          message,
+          type,
+          read,
+          dismissed,
+          created_at,
+          booking_id,
+          bookings (
+            customer_name,
+            vehicles (
+              make,
+              model,
+              year
+            )
+          )
+        `)
+        .eq('user_id', currentUserId)
+        .eq('dismissed', false)
+        .order('created_at', { ascending: false }); // Newest first (descending order)
+
+      if (error) throw error;
+
+      // Format notifications with time ago
+      const formattedNotifications = data.map(notification => {
+        const createdAt = new Date(notification.created_at);
+        const now = new Date();
+        const diffInMinutes = Math.floor((now - createdAt) / (1000 * 60));
+        
+        let timeAgo;
+        if (diffInMinutes < 1) {
+          timeAgo = 'Just now';
+        } else if (diffInMinutes < 60) {
+          timeAgo = `${diffInMinutes}m ago`;
+        } else if (diffInMinutes < 1440) {
+          const hours = Math.floor(diffInMinutes / 60);
+          timeAgo = `${hours}h ago`;
+        } else {
+          const days = Math.floor(diffInMinutes / 1440);
+          timeAgo = `${days}d ago`;
+        }
+
+        return {
+          ...notification,
+          timeAgo,
+          bookingId: notification.booking_id
+        };
+      });
+
+      setNotifications(formattedNotifications);
+    } catch (err) {
+      console.error('Error fetching notifications:', err);
+    }
   };
 
   const fetchDashboardData = async () => {
@@ -508,9 +559,8 @@ export default function DashboardScreen({ navigation }) {
         recentBookings
       });
 
-      // Generate notifications with state preservation
-      const newNotifications = generateNotifications(bookings || [], notifications, dismissedNotifications);
-      setNotifications(newNotifications);
+      // Generate notifications
+      await generateNotifications(bookings || []);
 
     } catch (err) {
       console.error('Dashboard fetch error:', err);
@@ -521,7 +571,13 @@ export default function DashboardScreen({ navigation }) {
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    if (currentUserId) {
+      fetchDashboardData();
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
 
     const vehiclesSub = supabase
       .channel('dashboard-vehicles-changes')
@@ -532,55 +588,55 @@ export default function DashboardScreen({ navigation }) {
       }, fetchDashboardData)
       .subscribe();
 
-      const bookingsSub = supabase
+    const bookingsSub = supabase
       .channel('dashboard-bookings-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, (payload) => {
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'bookings' 
+      }, (payload) => {
         const { eventType, new: newBooking, old: oldBooking } = payload;
-    
+
         if (eventType === 'INSERT') {
-          // New booking notification
-          setNotifications(prev => [
-            {
-              id: `new-${newBooking.id}`,
-              type: 'new_booking',
-              title: 'New Booking Added',
-              message: `${newBooking.customer_name} booked a vehicle`,
-              timeAgo: 'Just now',
-              priority: 'high',
-              read: false,
-              bookingId: newBooking.id
-            },
-            ...prev
-          ]);
+          // Create notification for new booking
+          createNotification({
+            bookingId: newBooking.id,
+            type: 'new_booking',
+            title: 'New Booking Added',
+            message: `${newBooking.customer_name} booked a vehicle`
+          });
         }
-    
+
         if (eventType === 'UPDATE' && oldBooking.status !== newBooking.status) {
-          // Status change notification
-          setNotifications(prev => [
-            {
-              id: `status-${newBooking.id}-${newBooking.status}`,
-              type: 'status_change',
-              title: `Booking ${newBooking.status}`,
-              message: `${newBooking.customer_name}'s booking is now ${newBooking.status}`,
-              timeAgo: 'Just now',
-              priority: 'high',
-              read: false,
-              bookingId: newBooking.id
-            },
-            ...prev
-          ]);
+          // Create notification for status change
+          createNotification({
+            bookingId: newBooking.id,
+            type: 'status_change',
+            title: `Booking ${newBooking.status}`,
+            message: `${newBooking.customer_name}'s booking is now ${newBooking.status}`
+          });
         }
-    
-        fetchDashboardData(); // still refresh stats & reminders
+
+        fetchDashboardData();
       })
       .subscribe();
-    
+
+    const notificationsSub = supabase
+      .channel('dashboard-notifications-changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'notifications',
+        filter: `user_id=eq.${currentUserId}`
+      }, fetchNotifications)
+      .subscribe();
 
     return () => {
       supabase.removeChannel(vehiclesSub);
       supabase.removeChannel(bookingsSub);
+      supabase.removeChannel(notificationsSub);
     };
-  }, []);
+  }, [currentUserId]);
 
   const handleLogout = async () => {
     try {
@@ -592,36 +648,79 @@ export default function DashboardScreen({ navigation }) {
   };
 
   const handleMarkNotificationRead = async (notificationId) => {
-    // Update local state
-    setNotifications(prev =>
-      prev.map(notif =>
-        notif.id === notificationId ? { ...notif, read: true } : notif
-      )
-    );
-  
-    // Persist in Supabase
-    const { error } = await supabase
-      .from("notifications")
-      .upsert({ id: notificationId, read: true });
-    
-    if (error) console.error("Error updating notification:", error);
+    try {
+      // Update local state immediately for responsiveness
+      setNotifications(prev =>
+        prev.map(notif =>
+          notif.id === notificationId ? { ...notif, read: true } : notif
+        )
+      );
+
+      // Update in database
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('id', notificationId)
+        .eq('user_id', currentUserId);
+
+      if (error) {
+        console.error('Error updating notification:', error);
+        // Revert local state if database update fails
+        setNotifications(prev =>
+          prev.map(notif =>
+            notif.id === notificationId ? { ...notif, read: false } : notif
+          )
+        );
+      }
+    } catch (err) {
+      console.error('Error marking notification as read:', err);
+    }
   };
-  
 
   const handleMarkAllRead = async () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    const { error } = await supabase.from("notifications").update({ read: true }).neq("read", true);
-    if (error) console.error("Error marking all as read:", error);
-  };
-  
+    try {
+      // Update local state
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
 
-  const handleRemoveNotification = (notificationId) => {
-    // Add to dismissed set to prevent it from coming back
-    setDismissedNotifications(prev => new Set([...prev, notificationId]));
-    // Remove from current notifications
-    setNotifications(prev => 
-      prev.filter(notif => notif.id !== notificationId)
-    );
+      // Update database
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('user_id', currentUserId)
+        .eq('read', false);
+
+      if (error) {
+        console.error('Error marking all notifications as read:', error);
+        // Fetch fresh data if update fails
+        fetchNotifications();
+      }
+    } catch (err) {
+      console.error('Error marking all notifications as read:', err);
+    }
+  };
+
+  const handleRemoveNotification = async (notificationId) => {
+    try {
+      // Remove from local state immediately
+      setNotifications(prev => 
+        prev.filter(notif => notif.id !== notificationId)
+      );
+
+      // Mark as dismissed in database (don't delete to preserve history)
+      const { error } = await supabase
+        .from('notifications')
+        .update({ dismissed: true })
+        .eq('id', notificationId)
+        .eq('user_id', currentUserId);
+
+      if (error) {
+        console.error('Error dismissing notification:', error);
+        // Fetch fresh data if update fails
+        fetchNotifications();
+      }
+    } catch (err) {
+      console.error('Error removing notification:', err);
+    }
   };
 
   const formatCurrency = (amount) => {

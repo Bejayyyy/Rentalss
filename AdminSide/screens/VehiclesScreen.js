@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback,useRef } from "react"
 import {
   View,
   Text,
@@ -23,7 +23,23 @@ import { supabase } from '../services/supabase'
 const { width } = Dimensions.get("window")
 const isWeb = Platform.OS === "web"
 
+function useDebounce(callback, delay) {
+  const timeoutRef = useRef(null)
+
+  const debounced = (...args) => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = setTimeout(() => {
+      callback(...args)
+    }, delay)
+  }
+
+  return debounced
+}
+
 export default function VehiclesScreen({ navigation }) {
+ 
+const [debouncedText, setDebouncedText] = useState("");
+
   const [vehicles, setVehicles] = useState([])
   const [vehicleVariants, setVehicleVariants] = useState([])
   const [loading, setLoading] = useState(true)
@@ -33,77 +49,51 @@ export default function VehiclesScreen({ navigation }) {
   const [vehicleToDelete, setVehicleToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
   
-  // New filter and search states
+  // Updated search states - removed debounced search
   const [searchText, setSearchText] = useState("")
   const [showFilters, setShowFilters] = useState(false)
   const [selectedSeats, setSelectedSeats] = useState("all")
   const [selectedType, setSelectedType] = useState("all")
   const [priceRange, setPriceRange] = useState("all")
 
-  // Move getVehicleVariants function definition before it's used in useMemo
-  const getVehicleVariants = useCallback((vehicleId) => {
-    return vehicleVariants.filter(variant => variant.vehicle_id === vehicleId)
+  // Optimize getVehicleVariants with useMemo to prevent recreation on every render
+  const vehicleVariantsMap = useMemo(() => {
+    const map = {}
+    vehicleVariants.forEach(variant => {
+      if (!map[variant.vehicle_id]) {
+        map[variant.vehicle_id] = []
+      }
+      map[variant.vehicle_id].push(variant)
+    })
+    return map
   }, [vehicleVariants])
 
+  const getVehicleVariants = useCallback((vehicleId) => {
+    return vehicleVariantsMap[vehicleId] || []
+  }, [vehicleVariantsMap])
+
+  // Updated filteredVehicles - using searchText directly for immediate search
   const filteredVehicles = useMemo(() => {
     let filtered = vehicles;
-
-    switch (activeFilter) {
-      case "available":
-        filtered = filtered.filter(v =>
-          !bookings.some(b => b.vehicle_id === v.id && b.status === "confirmed")
-        );
-        break;
-      case "rented":
-        filtered = filtered.filter(v =>
-          bookings.some(b => b.vehicle_id === v.id && b.status === "confirmed")
-        );
-        break;
-      case "maintenance":
-        filtered = filtered.filter(v => v.status === "maintenance");
-        break;
-    }
-
-    if (selectedSeats !== "all") {
-      filtered = filtered.filter(v => v.seats?.toString() === selectedSeats);
-    }
-
-    if (selectedType !== "all") {
-      filtered = filtered.filter(v => v.type?.toLowerCase() === selectedType.toLowerCase());
-    }
-
-    if (priceRange !== "all") {
-      filtered = filtered.filter(v => {
-        const price = parseFloat(v.price_per_day || 0);
-        switch (priceRange) {
-          case "under-1000": return price < 1000;
-          case "1000-2000": return price >= 1000 && price <= 2000;
-          case "2000-5000": return price > 2000 && price <= 5000;
-          case "over-5000": return price > 5000;
-          default: return true;
-        }
-      });
-    }
-
-    if (searchText.trim() !== "") {
-      const search = searchText.toLowerCase().trim();
-      filtered = filtered.filter(vehicle => {
-        const variants = getVehicleVariants(vehicle.id);
-        const colors = variants.map(v => v.color).join(' ').toLowerCase();
-        return (
-          vehicle.make?.toLowerCase().includes(search) ||
-          vehicle.model?.toLowerCase().includes(search) ||
-          vehicle.year?.toString().includes(search) ||
-          vehicle.type?.toLowerCase().includes(search) ||
-          vehicle.price_per_day?.toString().includes(search) ||
-          colors.includes(search)
-        );
-      });
-    }
-
-    return filtered;
-  }, [vehicles, bookings, vehicleVariants, searchText, activeFilter, selectedSeats, selectedType, priceRange, getVehicleVariants]);
-
+  
+    if (debouncedText.trim() === "") return vehicles;
+    
+     const search = debouncedText.toLowerCase().trim();
+       return vehicles.filter(vehicle => {
+         const variants = getVehicleVariants(vehicle.id);
+         const colors = variants.map(v => v.color?.toLowerCase() || "").join(" ");
+         const searchableText = [
+           vehicle.make?.toLowerCase(),
+           vehicle.model?.toLowerCase(),
+           vehicle.year?.toString(),
+          vehicle.type?.toLowerCase(),
+          vehicle.price_per_day?.toString(),
+           colors
+         ].filter(Boolean).join(" ");
+         return searchableText.includes(search);
+       });
+    }, [vehicles, debouncedText, getVehicleVariants]);
+  
   useEffect(() => {
     fetchVehicles()
     fetchVehicleVariants()
@@ -240,34 +230,34 @@ export default function VehiclesScreen({ navigation }) {
     }
   }
 
-  // Get unique values for filter options
-  const getUniqueSeats = () => {
+  // Optimize unique values calculation with memoization
+  const getUniqueSeats = useMemo(() => {
     const seats = [...new Set(vehicles.map(v => v.seats).filter(Boolean))]
     return seats.sort((a, b) => a - b)
-  }
+  }, [vehicles])
 
-  const getUniqueTypes = () => {
+  const getUniqueTypes = useMemo(() => {
     const types = [...new Set(vehicles.map(v => v.type).filter(Boolean))]
     return types.sort()
-  }
+  }, [vehicles])
 
-  const clearAllFilters = () => {
+  const clearAllFilters = useCallback(() => {
     setSearchText("")
     setSelectedSeats("all")
     setSelectedType("all")
     setPriceRange("all")
     setActiveFilter("all")
-  }
+  }, [])
 
-  const showDeleteConfirmation = (vehicle) => {
+  const showDeleteConfirmation = useCallback((vehicle) => {
     setVehicleToDelete(vehicle)
     setDeleteModalVisible(true)
-  }
+  }, [])
 
-  const hideDeleteConfirmation = () => {
+  const hideDeleteConfirmation = useCallback(() => {
     setDeleteModalVisible(false)
     setVehicleToDelete(null)
-  }
+  }, [])
 
   const confirmDeleteVehicle = async () => {
     if (!vehicleToDelete) return
@@ -299,7 +289,8 @@ export default function VehiclesScreen({ navigation }) {
     }
   }
 
-  const renderVehicleItem = ({ item }) => {
+  // Optimize renderVehicleItem with useCallback to prevent unnecessary re-renders
+  const renderVehicleItem = useCallback(({ item }) => {
     const variants = getVehicleVariants(item.id)
     const totalVariantQuantity = variants.reduce((sum, variant) => sum + variant.total_quantity, 0)
     const availableVariantQuantity = variants.reduce((sum, variant) => sum + variant.available_quantity, 0)
@@ -421,7 +412,7 @@ export default function VehiclesScreen({ navigation }) {
         </View>
       </View>
     )
-  }
+  }, [getVehicleVariants, navigation, showDeleteConfirmation])
 
   const renderFiltersModal = () => (
     <Modal
@@ -455,7 +446,7 @@ export default function VehiclesScreen({ navigation }) {
                     All Seats
                   </Text>
                 </TouchableOpacity>
-                {getUniqueSeats().map(seats => (
+                {getUniqueSeats.map(seats => (
                   <TouchableOpacity
                     key={seats}
                     style={[styles.filterOption, selectedSeats === seats.toString() && styles.filterOptionActive]}
@@ -481,7 +472,7 @@ export default function VehiclesScreen({ navigation }) {
                     All Types
                   </Text>
                 </TouchableOpacity>
-                {getUniqueTypes().map(type => (
+                {getUniqueTypes.map(type => (
                   <TouchableOpacity
                     key={type}
                     style={[styles.filterOption, selectedType === type && styles.filterOptionActive]}
@@ -593,10 +584,10 @@ export default function VehiclesScreen({ navigation }) {
 
   const renderHeader = () => {
     const stats = getVehicleStats()
-    const activeFiltersCount = [searchText, selectedSeats, selectedType, priceRange].filter(
-      f => f && f !== "all"
-    ).length
-    
+ 
+    const debouncedSearch = useDebounce((text) => {
+      setDebouncedText(text);
+    }, 300);
     return (
       <>
         {/* Header with Enhanced Design */}
@@ -673,48 +664,44 @@ export default function VehiclesScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Search Bar */}
-        <View style={styles.searchSection}>
-          <View style={styles.searchContainer}>
-            <View style={styles.searchInputContainer}>
-              <Ionicons name="search" size={20} color="#6b7280" style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search vehicles..."
-                value={searchText}
-                onChangeText={setSearchText}
-                placeholderTextColor="#9ca3af"
-                autoCorrect={false}
-                autoCapitalize="none"
-              />
+        {/* Immediate Search Section */}
+      
+<View style={styles.searchSection}>
+  <View style={styles.searchContainer}>
+    <View style={styles.searchInputContainer}>
+      <Ionicons name="search" size={20} color="#6b7280" style={styles.searchIcon} />
 
-              {searchText.length > 0 && (
-                <TouchableOpacity
-                  style={styles.searchClearButton}
-                  onPress={() => setSearchText("")}
-                >
-                  <Ionicons name="close-circle" size={20} color="#6b7280" />
-                </TouchableOpacity>
-              )}
-            </View>
-            
-            <TouchableOpacity
-              style={[styles.filtersButton, activeFiltersCount > 0 && styles.filtersButtonActive]}
-              onPress={() => setShowFilters(true)}
-            >
-              <Ionicons 
-                name="options" 
-                size={20} 
-                color={activeFiltersCount > 0 ? "white" : "#6b7280"} 
-              />
-              {activeFiltersCount > 0 && (
-                <View style={styles.filtersBadge}>
-                  <Text style={styles.filtersBadgeText}>{activeFiltersCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
+      <TextInput
+  style={styles.searchInput}
+  placeholder="Search vehicles..."
+  value={searchText}
+  onChangeText={(text) => {
+    setSearchText(text);        // always update visible text
+    debouncedSearch(text);      // update filtering after 300ms
+  }}
+  placeholderTextColor="#9ca3af"
+  autoCorrect={false}
+  autoCapitalize="none"
+  returnKeyType="search"
+  clearButtonMode="while-editing"
+/>
+
+
+{searchText.length > 0 && (
+  <TouchableOpacity
+    style={styles.searchClearButton}
+    onPress={() => {
+      setSearchText("");
+      setDebouncedText("");
+    }}
+  >
+    <Ionicons name="close-circle" size={20} color="#6b7280" />
+  </TouchableOpacity>
+      )}
+    </View>
+  </View>
+</View>
+
 
         {/* Enhanced Filter Section */}
         <View style={styles.filterSection}>
@@ -876,6 +863,13 @@ export default function VehiclesScreen({ navigation }) {
         numColumns={1}
         ListEmptyComponent={!loading ? renderEmptyState : null}
         ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+        // Optimize FlatList performance for immediate search
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={10}
+        windowSize={10}
+        getItemLayout={undefined}
       />
       
       {renderDeleteModal()}

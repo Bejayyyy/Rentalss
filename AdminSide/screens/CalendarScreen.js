@@ -11,11 +11,20 @@ import {
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../services/supabase';
 
-export default function CalendarScreen() {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+export default function CalendarComponent({ 
+  showHeader = true,
+  headerTitle = "Rental Calendar",
+  headerSubtitle = "Tap any date to view bookings",
+  showLegend = true,
+  containerStyle,
+  calendarStyle,
+  onDateSelect,
+  onBookingSelect
+}) {
+  const today = new Date().toISOString().split('T')[0];
+const [selectedDate, setSelectedDate] = useState(today);
   const [bookings, setBookings] = useState({});
   const [dayBookings, setDayBookings] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -57,7 +66,6 @@ export default function CalendarScreen() {
             make,
             model,
             year,
-            
             image_url
           )
         `)
@@ -145,8 +153,15 @@ export default function CalendarScreen() {
   const onDayPress = (day) => {
     setSelectedDate(day.dateString);
     const dayData = bookings[day.dateString];
-    setDayBookings(dayData ? dayData.bookings : []);
+    const selectedDayBookings = dayData ? dayData.bookings : [];
+    
+    setDayBookings(selectedDayBookings);
     setModalVisible(true);
+    
+    // Call parent callback if provided
+    if (onDateSelect) {
+      onDateSelect(day.dateString, selectedDayBookings);
+    }
   };
 
   const formatCurrency = (amount) => {
@@ -161,8 +176,29 @@ export default function CalendarScreen() {
     });
   };
 
+  // Helper function to format date showing only month name
+ // Helper function to format date showing only month and year
+const formatDateMonthOnly = (dateString) => {
+  const date = new Date(dateString + 'T00:00:00'); // Add time to avoid timezone issues
+  return date.toLocaleDateString('en-PH', {
+    year: 'numeric',
+    month: 'long'
+  });
+};
+
+
+  const handleBookingPress = (booking) => {
+    if (onBookingSelect) {
+      onBookingSelect(booking);
+    }
+  };
+
   const renderBookingItem = ({ item }) => (
-    <View style={styles.bookingItem}>
+    <TouchableOpacity 
+      style={styles.bookingItem}
+      onPress={() => handleBookingPress(item)}
+      activeOpacity={onBookingSelect ? 0.7 : 1}
+    >
       <View style={styles.bookingHeader}>
         <Text style={styles.customerName}>{item.customer_name}</Text>
         <View style={[styles.statusBadge, { 
@@ -222,84 +258,87 @@ export default function CalendarScreen() {
           </View>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]}>
+      <View style={[styles.container, styles.centered, containerStyle]}>
         <ActivityIndicator size="large" color="#FF6B35" />
         <Text style={styles.loadingText}>Loading calendar...</Text>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Rental Calendar</Text>
-        <Text style={styles.headerSubtitle}>
-          Tap any date to view bookings
-        </Text>
-      </View>
+    <View style={[styles.container, containerStyle]}>
+      {showHeader && (
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>{headerTitle}</Text>
+          <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
+        </View>
+      )}
 
-      <Calendar
-        onDayPress={onDayPress}
-        markedDates={{
-          ...bookings,
-          [selectedDate]: {
-            ...bookings[selectedDate],
-            selected: true,
-            selectedColor: '#FF6B35'
-          }
-        }}
-        theme={{
-          backgroundColor: '#ffffff',
-          calendarBackground: '#ffffff',
-          textSectionTitleColor: '#b6c1cd',
-          selectedDayBackgroundColor: '#FF6B35',
-          selectedDayTextColor: '#ffffff',
-          todayTextColor: '#FF6B35',
-          dayTextColor: '#2d4150',
-          textDisabledColor: '#d9e1e8',
-          dotColor: '#FF6B35',
-          selectedDotColor: '#ffffff',
-          arrowColor: '#FF6B35',
-          disabledArrowColor: '#d9e1e8',
-          monthTextColor: '#2d4150',
-          indicatorColor: '#FF6B35',
-          textDayFontFamily: 'System',
-          textMonthFontFamily: 'System',
-          textDayHeaderFontFamily: 'System',
-          textDayFontWeight: '300',
-          textMonthFontWeight: 'bold',
-          textDayHeaderFontWeight: '300',
-          textDayFontSize: 16,
-          textMonthFontSize: 16,
-          textDayHeaderFontSize: 13
-        }}
-        style={styles.calendar}
-        showsVerticalScrollIndicator={false}
-      />
+<Calendar
+  onDayPress={onDayPress}
+  markedDates={{
+    ...bookings,
+    [selectedDate]: {
+      ...bookings[selectedDate],
+      selected: true,
+      selectedColor: '#FF6B35'
+    }
+  }}
+  monthFormat={'MMMM yyyy'}   // 👈 Only month + year, no day, no time, no GMT
+  theme={{
+    backgroundColor: '#ffffff',
+    calendarBackground: '#ffffff',
+    textSectionTitleColor: '#b6c1cd',
+    selectedDayBackgroundColor: '#FF6B35',
+    selectedDayTextColor: '#ffffff',
+    todayTextColor: '#FF6B35',
+    dayTextColor: '#2d4150',
+    textDisabledColor: '#d9e1e8',
+    dotColor: '#FF6B35',
+    selectedDotColor: '#ffffff',
+    arrowColor: '#FF6B35',
+    disabledArrowColor: '#d9e1e8',
+    monthTextColor: '#2d4150',
+    indicatorColor: '#FF6B35',
+    textDayFontFamily: 'System',
+    textMonthFontFamily: 'System',
+    textDayHeaderFontFamily: 'System',
+    textDayFontWeight: '300',
+    textMonthFontWeight: 'bold',
+    textDayHeaderFontWeight: '300',
+    textDayFontSize: 16,
+    textMonthFontSize: 16,
+    textDayHeaderFontSize: 13
+  }}
+  style={[styles.calendar, calendarStyle]}
+  showsVerticalScrollIndicator={false}
+/>
 
-      <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#f59e0b' }]} />
-          <Text style={styles.legendText}>Pending</Text>
+      {showLegend && (
+        <View style={styles.legend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#f59e0b' }]} />
+            <Text style={styles.legendText}>Pending</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#10b981' }]} />
+            <Text style={styles.legendText}>Confirmed</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
+            <Text style={styles.legendText}>Completed</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
+            <Text style={styles.legendText}>Cancelled</Text>
+          </View>
         </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#10b981' }]} />
-          <Text style={styles.legendText}>Confirmed</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#059669' }]} />
-          <Text style={styles.legendText}>Completed</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
-          <Text style={styles.legendText}>Cancelled</Text>
-        </View>
-      </View>
+      )}
 
       {/* Day Bookings Modal */}
       <Modal
@@ -312,13 +351,9 @@ export default function CalendarScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                Bookings for {new Date(selectedDate).toLocaleDateString('en-PH', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
+                Bookings for {formatDateMonthOnly(selectedDate)}
               </Text>
+
               <TouchableOpacity 
                 onPress={() => setModalVisible(false)}
                 style={styles.closeButton}
@@ -344,7 +379,7 @@ export default function CalendarScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -352,6 +387,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+   
   },
   centered: {
     justifyContent: 'center',
