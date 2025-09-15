@@ -95,7 +95,7 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
         key={variant.id}
         onClick={() => setSelectedVariant(variant)}
         className={`rounded-full transition-all duration-200
-          ${isSelected ? "w-8 h-8 scale-125 shadow-md" : "w-6 h-6"}
+          ${isSelected ? "w-6 h-6 scale-125 shadow-md" : "w-4 h-4"}
         `}
         style={{
           backgroundColor: bgColor,
@@ -127,7 +127,7 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
 </div>
 {/* Color Variants */}
 <div className="absolute bottom-10 left-1/2 -translate-x-1/2">
-  <div className="flex gap-4 bg-white/30 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/100 shadow-lg">
+  <div className="flex gap-4 bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl shadow-lg">
     {variants.map(renderColorSwatch)}
   </div>
 </div>
@@ -554,9 +554,9 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
         <button
           onClick={() => !isUnavailable && handleVariantSelect(variant)}
           disabled={isUnavailable}
-          className={`w-7 h-7 rounded-full border-4 border-black-100
-            ${isSelected ? "ring-2 ring-white" : ""}
-            ${isUnavailable ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+          className={`w-5 h-5 rounded-full border-2 border-black-100 
+            ${isSelected ? "ring-1 ring-white" : ""}
+            ${isUnavailable ? "opacity-20 cursor-not-allowed" : "cursor-pointer"}
           `}
           style={{
             backgroundColor: bgColor,
@@ -565,8 +565,8 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
         />
         {/* Slash line for unavailable */}
         {isUnavailable && (
-          <span className="absolute left-1/2 top-1/2 w-8 h-[2px] bg-red-400 rotate-50 -translate-x-1/2 -translate-y-1/2 pointer-events-none"></span>
-        )}
+  <span className="absolute left-1/2 top-1/2 w-[20px] h-[1.5px] bg-red-500 rotate-45 -translate-x-1/2 -translate-y-1/2 pointer-events-none"></span>
+)}
       </div>
     );
   })}
@@ -574,203 +574,213 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
 
 
 {/* Car Details */}
-<div className="mt-4 text-center lg:text-left text-gray-900">
+<div className="mt-4 text-center lg:text-left text-black">
   <h3 className="text-3xl font-bold mb-3">
     {displayCar?.make} {displayCar?.model}
   </h3>
-  <div className="flex items-center justify-center lg:justify-start gap-4 text-sm text-gray-600 mb-3">
+  <div className="flex items-center justify-center lg:justify-start gap-4 text-sm text-black-900 mb-3">
     <span className="flex items-center gap-2 bg-white px-3 py-1 rounded-full shadow">
-      <Calendar className="w-4 h-4 text-gray-400" />
+      <Calendar className="w-4 h-4 text-black" />
       {displayCar?.year}
     </span>
     <span className="flex items-center gap-2 bg-white px-3 py-1 rounded-full shadow">
-      <Car className="w-4 h-4 text-gray-400" />
+      <Car className="w-4 h-4 text-black" />
       {displayCar?.seats} seats
     </span>
   </div>
-  <div className="text-3xl font-bold text-emerald-600">
+  <div className="text-3xl font-bold text-green-600">
     ₱{displayCar?.price_per_day?.toLocaleString()}
-    <span className="text-lg font-normal text-gray-500 ml-1">/day</span>
+    <span className="text-lg font-normal text-black-900 ml-1">/day</span>
   </div>
 </div>
 </div>
-              <div className="lg:w-3/5 p-8">
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-3xl font-bold text-gray-900">Complete Your Booking</h2>
-                  <button
-                    onClick={onClose}
-                    className="w-12 h-12 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-200 hover:scale-105"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <form onSubmit={handleSubmit} className="space-y-8">
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
-                    <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <User className="w-5 h-5 text-blue-600" />
-                      </div>
-                      Personal Information
-                    </h3>
-                    <div className="grid gap-5 md:grid-cols-2">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name *</label>
-                        <input
-                          type="text"
-                          name="fullName"
-                          value={formData.fullName}
-                          onChange={handleInputChange}
-                          required
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
-                          placeholder="Enter your full name"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address *</label>
-                        <input
-                          type="email"
-                          name="email"
-                          value={formData.email}
-                          onChange={handleInputChange}
-                          required
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
-                          placeholder="Enter your email"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number *</label>
-                        <input
-                          type="tel"
-                          name="phone"
-                          value={formData.phone}
-                          onChange={handleInputChange}
-                          required
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
-                          placeholder="Enter your phone number"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">License Number *</label>
-                        <input
-                          type="text"
-                          name="licenseNumber"
-                          value={formData.licenseNumber}
-                          onChange={handleInputChange}
-                          required
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
-                          placeholder="Enter your license number"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 border border-green-100">
-                    <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                        <Clock className="w-5 h-5 text-green-600" />
-                      </div>
-                      Rental Details
-                    </h3>
-                    <div className="grid gap-5 md:grid-cols-2">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Pickup Date *</label>
-                        <input
-                          type="date"
-                          name="pickupDate"
-                          value={formData.pickupDate}
-                          onChange={handleInputChange}
-                          min={new Date().toISOString().split("T")[0]}
-                          required
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Return Date *</label>
-                        <input
-                          type="date"
-                          name="returnDate"
-                          value={formData.returnDate}
-                          onChange={handleInputChange}
-                          min={formData.pickupDate || new Date().toISOString().split("T")[0]}
-                          required
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white"
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-5">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Pickup Location *</label>
-                      <input
-                        type="text"
-                        name="pickupLocation"
-                        value={formData.pickupLocation}
-                        onChange={handleInputChange}
-                        required
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white"
-                        placeholder="Enter pickup location"
-                      />
-                    </div>
-                  </div>
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-6 border border-purple-100">
-                    <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                      <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                        <CreditCard className="w-5 h-5 text-purple-600" />
-                      </div>
-                      Identity Verification
-                    </h3>
-                    <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">Upload Government ID *</label>
-                    <div className="border-3 border-dashed border-gray-300 rounded-2xl p-8 text-center hover:border-purple-400 hover:bg-white transition-all duration-300 bg-white/50">
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg"
-                        onChange={handleFileChange}
-                        className="hidden"
-                        id="govId"
-                      />
-                      <label htmlFor="govId" className="cursor-pointer block">
-                        {govIdPreview ? (
-                          <img
-                            src={govIdPreview}
-                            alt="ID Preview"
-                            className="mx-auto mb-4 max-h-40 rounded-2xl object-contain shadow-md"
-                          />
-                        ) : (
-                          <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Upload className="w-8 h-8 text-purple-600" />
-                          </div>
-                        )}
-                        <p className="text-lg font-medium text-gray-700 mb-2">
-                          {govIdPreview ? "Click to change your ID" : "Click to upload your ID"}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          JPEG or PNG (Max 5MB)
-                        </p>
-                      </label>
-                    </div>
-                  </div>
-                  </div>
-                  <div className="flex justify-between items-center bg-gray-100 p-6 rounded-2xl border border-gray-200">
-                    <div>
-                      <div className="text-xl text-gray-600 font-semibold">Total Price ({rentalDays} days)</div>
-                      <div className="text-4xl font-extrabold text-emerald-600 mt-1">
-                        ₱{totalPrice.toLocaleString()}
-                      </div>
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={isSubmitting || !selectedVariant || Number(selectedVariant?.available_quantity) === 0}
-                      className={`px-8 py-4 rounded-2xl text-lg font-bold transition-all duration-300 transform
-                        ${
-                          isSubmitting || !selectedVariant || Number(selectedVariant?.available_quantity) === 0
-                            ? 'bg-gray-900 text-white cursor-not-allowed opacity-60'
-                            : 'bg-black text-white cursor-pointer hover:bg-gray-800 shadow-lg hover:scale-105'
-                        }`}
-                    >
-                      {isSubmitting ? "Submitting..." : "Confirm Booking"}
-                    </button>
 
-                  </div>
-                </form>
+<div className="lg:w-3/5 p-8">
+  <div className="flex items-center justify-between mb-8">
+    <h2 className="text-3xl font-bold text-gray-900">Complete Your Booking</h2>
+    <button
+      onClick={onClose}
+      className="w-12 h-12 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-200 hover:scale-105"
+    >
+      <X className="w-5 h-5 text-black" />
+    </button>
+  </div>
+
+  <form onSubmit={handleSubmit} className="space-y-8">
+    {/* Personal Information */}
+    <div className="bg-white rounded-2xl p-6 border border-gray-200">
+      <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+          <User className="w-5 h-5 text-black" />
+        </div>
+        Personal Information
+      </h3>
+      <div className="grid gap-5 md:grid-cols-2">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name *</label>
+          <input
+            type="text"
+            name="fullName"
+            value={formData.fullName}
+            onChange={handleInputChange}
+            required
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl  focus:ring-black focus:border-black transition-all duration-200 bg-white"
+            placeholder="Enter your full name"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address *</label>
+          <input
+            type="email"
+            name="email"
+            value={formData.email}
+            onChange={handleInputChange}
+            required
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl  focus:ring-black focus:border-black transition-all duration-200 bg-white"
+            placeholder="Enter your email"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number *</label>
+          <input
+            type="tel"
+            name="phone"
+            value={formData.phone}
+            onChange={handleInputChange}
+            required
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl  focus:ring-black focus:border-black transition-all duration-200 bg-white"
+            placeholder="Enter your phone number"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">License Number *</label>
+          <input
+            type="text"
+            name="licenseNumber"
+            value={formData.licenseNumber}
+            onChange={handleInputChange}
+            required
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-black focus:border-black transition-all duration-200 bg-white"
+            placeholder="Enter your license number"
+          />
+        </div>
+      </div>
+    </div>
+
+    {/* Rental Details */}
+    <div className="bg-white rounded-2xl p-6 border border-gray-200">
+      <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+          <Clock className="w-5 h-5 text-black" />
+        </div>
+        Rental Details
+      </h3>
+      <div className="grid gap-5 md:grid-cols-2">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Pickup Date *</label>
+          <input
+            type="date"
+            name="pickupDate"
+            value={formData.pickupDate}
+            onChange={handleInputChange}
+            min={new Date().toISOString().split("T")[0]}
+            required
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-black focus:border-black transition-all duration-200 bg-white"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Return Date *</label>
+          <input
+            type="date"
+            name="returnDate"
+            value={formData.returnDate}
+            onChange={handleInputChange}
+            min={formData.pickupDate || new Date().toISOString().split("T")[0]}
+            required
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl  focus:ring-black focus:border-black transition-all duration-200 bg-white"
+          />
+        </div>
+      </div>
+      <div className="mt-5">
+        <label className="block text-sm font-semibold text-gray-700 mb-2">Pickup Location *</label>
+        <input
+          type="text"
+          name="pickupLocation"
+          value={formData.pickupLocation}
+          onChange={handleInputChange}
+          required
+          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl  focus:ring-black focus:border-black transition-all duration-200 bg-white"
+          placeholder="Enter pickup location"
+        />
+      </div>
+    </div>
+
+    {/* Identity Verification */}
+    <div className="bg-white rounded-2xl p-6 border border-gray-200">
+      <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+          <CreditCard className="w-5 h-5 text-black" />
+        </div>
+        Identity Verification
+      </h3>
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-3">Upload Government ID *</label>
+        <div className="border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center hover:border-gray-500 hover:bg-gray-50 transition-all duration-300 bg-white/50">
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            onChange={handleFileChange}
+            className="hidden"
+            id="govId"
+          />
+          <label htmlFor="govId" className="cursor-pointer block">
+            {govIdPreview ? (
+              <img
+                src={govIdPreview}
+                alt="ID Preview"
+                className="mx-auto mb-4 max-h-40 rounded-2xl object-contain shadow-md"
+              />
+            ) : (
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Upload className="w-8 h-8 text-black" />
               </div>
+            )}
+            <p className="text-lg font-medium text-gray-700 mb-2">
+              {govIdPreview ? "Click to change your ID" : "Click to upload your ID"}
+            </p>
+            <p className="text-sm text-gray-500">JPEG or PNG (Max 5MB)</p>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    {/* Total Price */}
+    <div className="flex justify-between items-center bg-gray-100 p-6 rounded-2xl border border-gray-200">
+      <div>
+        <div className="text-xl text-gray-600 font-semibold">
+          Total Price ({rentalDays} days)
+        </div>
+        <div className="text-4xl font-extrabold text-black mt-1">
+          ₱{totalPrice.toLocaleString()}
+        </div>
+      </div>
+      <button
+        type="submit"
+        disabled={isSubmitting || !selectedVariant || Number(selectedVariant?.available_quantity) === 0}
+        className={`px-8 py-4 rounded-2xl text-lg font-bold transition-all duration-300 transform
+          ${
+            isSubmitting || !selectedVariant || Number(selectedVariant?.available_quantity) === 0
+              ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
+              : "bg-black text-white cursor-pointer hover:bg-gray-800 shadow-lg hover:scale-105"
+          }`}
+      >
+        {isSubmitting ? "Submitting..." : "Confirm Booking"}
+      </button>
+    </div>
+  </form>
+</div>
+
+
             </div>
           </div>
         </div>
@@ -992,7 +1002,7 @@ const WhyChooseUs = () => {
           {features.map((feature, index) => (
             <div
               key={index}
-              className="bg-black text-white p-10 rounded-xl hover:bg-gray-800 transition-all duration-300 hover:scale-105"
+              className="bg-[#101010] text-white p-10 rounded-xl hover:bg-gray-800 transition-all duration-300 hover:scale-105"
             >
               <div className="mb-8 flex justify-center">{feature.icon}</div>
               <h3 className="text-xl font-bold mb-6">{feature.title}</h3>
@@ -1438,76 +1448,65 @@ const FAQs = () => {
   )
 }
 
-/* ===========================
-   Contact Us
-   =========================== */
 const ContactUs = () => {
   return (
     <section
       className="relative py-20 px-6 md:px-10 lg:px-20 text-gray-900"
-      style={{ backgroundImage: `url(${bgContact})`, backgroundSize: "cover", backgroundPosition: "center" }}
+      style={{
+        backgroundImage: `url(${bgContact})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
     >
-      <div className="absolute inset-0 bg-white/80"></div>
-      <div className="relative max-w-6xl mx-auto grid lg:grid-cols-2 gap-12">
-        <div>
-          <h2 className="text-4xl lg:text-5xl font-bold mb-6">Contact Us</h2>
-          <p className="text-gray-700 mb-6">
-            Have questions or need assistance with your booking? Our friendly team is here to help!
+      {/* overlay */}
+      <div className="absolute inset-0 bg-white/0 "></div>
+
+      <div className="relative max-w-6xl mx-auto grid lg:grid-cols-2 gap-12 items-start">
+        {/* Contact Details Box */}
+        <div className="bg-white/30 backdrop-blur-md rounded-2xl shadow-xl p-8 space-y-6">
+          <h2 className="text-4xl lg:text-5xl font-bold mb-4">Contact Us</h2>
+          <p className="text-gray-700 leading-relaxed">
+            Have questions or need assistance with your booking? 
+            Our friendly team is here to help you 24/7.
           </p>
 
-          <div className="space-y-4">
+          <div className="space-y-4 mt-6">
             <div className="flex items-center space-x-3">
-              <MapPin className="h-5 w-5" />
-              <span>Cebu City, Philippines</span>
+              <MapPin className="h-6 w-6 text-gray-900" />
+              <span className="text-lg">Cebu City, Philippines</span>
             </div>
             <div className="flex items-center space-x-3">
-              <Phone className="h-5 w-5" />
-              <a href="tel:+639000000000" className="hover:underline">
+              <Phone className="h-6 w-6 text-gray-900" />
+              <a href="tel:+639000000000" className="hover:underline text-lg">
                 +63 900 000 0000
               </a>
             </div>
             <div className="flex items-center space-x-3">
-              <Mail className="h-5 w-5" />
-              <a href="mailto:hello@rentalden.com" className="hover:underline">
+              <Mail className="h-6 w-6 text-gray-900" />
+              <a href="mailto:hello@rentalden.com" className="hover:underline text-lg">
                 hello@rentalden.com
               </a>
             </div>
           </div>
         </div>
 
-        <div className="bg-white/70 p-10 rounded-2xl shadow-xl space-y-6">
-          <h3 className="text-2xl font-bold mb-4">Send a Message</h3>
-          <form onSubmit={(e) => e.preventDefault()}>
-            <div className="grid gap-4">
-              <input
-                type="text"
-                placeholder="Your Name"
-                className="w-full p-3 rounded-lg bg-white/30 text-gray-900 focus:outline-none focus:ring-1 focus:ring-black"
-              />
-              <input
-                type="email"
-                placeholder="you@example.com"
-                className="w-full p-3 rounded-lg bg-white/30 text-gray-900 focus:outline-none focus:ring-1 focus:ring-black"
-              />
-              <textarea
-                rows="4"
-                placeholder="Write your message."
-                className="w-full p-3 rounded-lg bg-white/30 text-gray-900 focus:outline-none focus:ring-1 focus:ring-black"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-900 transition"
-            >
-              Send Message
-            </button>
-          </form>
+        {/* Map Box */}
+        <div className="bg-white/70 backdrop-blur-md rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+          <iframe
+            title="Rental Den Location"
+            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d62808.5234949729!2d123.8665!3d10.3157!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x33a9991b55555555%3A0xaaaaaaaaaaaaaaa!2sCebu%20City!5e0!3m2!1sen!2sph!4v1694700000000!5m2!1sen!2sph"
+            width="100%"
+            height="400"
+            style={{ border: 0 }}
+            allowFullScreen=""
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+          ></iframe>
         </div>
       </div>
     </section>
   )
 }
-
 /* ===========================
    Main App
    =========================== */
