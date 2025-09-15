@@ -22,7 +22,6 @@ import { Dropdown } from 'react-native-element-dropdown';
 import { Button } from 'react-native';
 import BookingForm from '../components/BookingScreen/BookingForm';
 import ActionModal from '../components/AlertModal/ActionModal';
-import CalendarScreen from './CalendarScreen';
 
 const { width } = Dimensions.get('window');
 
@@ -33,6 +32,7 @@ export default function BookingsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [actionModalConfig, setActionModalConfig] = useState(null);
 
   
   // Enhanced overview filters with proper cascading
@@ -241,53 +241,39 @@ export default function BookingsScreen() {
   };
 
   const deleteBooking = async (bookingId) => {
-    setActionModalConfig({
-      type: "delete",
-      title: "Delete Booking",
-      message: "Are you sure you want to delete this booking? This action cannot be undone.",
-      onConfirm: async () => {
-        try {
-          setActionModalVisible(false);
-          const { data: booking, error: fetchError } = await supabase
-            .from("bookings")
-            .select("status, vehicle_variant_id")
-            .eq("id", bookingId)
-            .single();
-
-          if (fetchError) {
-            console.error("Fetch error:", fetchError);
-            return;
-          }
-
-          const { error } = await supabase
-            .from("bookings")
-            .delete()
-            .eq("id", bookingId);
-
-          if (error) {
-            console.error("Delete error:", error);
-            return;
-          }
-
-          if (booking.status === "confirmed" && booking.vehicle_variant_id) {
-            await supabase.rpc("adjust_variant_quantity", {
-              variant_id: booking.vehicle_variant_id,
-              change: +1,
-            });
-          }
-
-          await fetchBookings();
-          await fetchAvailableVehicles();
-          closeEditModal();
-        } catch (err) {
-          console.error("Delete booking error:", err);
-        }
-      },
-      onClose: () => setActionModalVisible(false),
-    });
-    setActionModalVisible(true);
+    try {
+      const { data: booking, error: fetchError } = await supabase
+        .from("bookings")
+        .select("status, vehicle_variant_id")
+        .eq("id", bookingId)
+        .single();
+  
+      if (fetchError) throw fetchError;
+  
+      const { error } = await supabase
+        .from("bookings")
+        .delete()
+        .eq("id", bookingId);
+  
+      if (error) throw error;
+  
+      if (booking.status === "confirmed" && booking.vehicle_variant_id) {
+        await supabase.rpc("adjust_variant_quantity", {
+          variant_id: booking.vehicle_variant_id,
+          change: +1,
+        });
+      }
+  
+      await fetchBookings();
+      await fetchAvailableVehicles();
+      closeEditModal();
+      Alert.alert("Success", "Booking deleted successfully");
+    } catch (err) {
+      console.error("Delete booking error:", err);
+      Alert.alert("Error", "Something went wrong while deleting booking");
+    }
   };
-
+  
   
 
   const filterBookings = () => {
@@ -482,22 +468,17 @@ export default function BookingsScreen() {
     return weeks;
   };
 
-  const showConfirmation = (title, message, onConfirm) => {
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Confirm', onPress: onConfirm, style: 'default' }
-    ]);
-  };
+ 
+const showConfirmation = (title, message, onConfirm) => {
+  setActionModalConfig({ title, message, onConfirm });
+};
 
   const updateBookingStatus = async (bookingId, newStatus) => {
-    // EDITED: Now uses `setActionModalConfig` to set up your custom modal
-    setActionModalConfig({
-      type: "confirm",
-      title: "Update Status",
-      message: `Are you sure you want to change the status to "${newStatus}"?`,
-      onConfirm: async () => {
+    showConfirmation(
+      'Update Status',
+      `Are you sure you want to change the status to "${newStatus}"?`,
+      async () => {
         try {
-          setActionModalVisible(false);
           const { error } = await supabase
             .from('bookings')
             .update({ status: newStatus, updated_at: new Date().toISOString() })
@@ -505,6 +486,7 @@ export default function BookingsScreen() {
 
           if (error) {
             console.error('Status update error:', error);
+            Alert.alert('Error', 'Failed to update booking status');
             return;
           }
 
@@ -519,70 +501,65 @@ export default function BookingsScreen() {
           if (newStatus === 'completed' || newStatus === 'cancelled') {
             await fetchAvailableVehicles();
           }
+
+          Alert.alert('Success', 'Booking status updated successfully');
         } catch (error) {
           console.error('Status update error:', error);
+          Alert.alert('Error', 'Something went wrong while updating status');
         }
-      },
-      onClose: () => setActionModalVisible(false),
-    });
-    setActionModalVisible(true);
+      }
+    );
   };
 
-  const updateBooking = async (updatedBooking) => {
-    // EDITED: Now uses `setActionModalConfig` to set up your custom modal
-    setActionModalConfig({
-      type: "confirm",
-      title: "Save Changes",
-      message: "Are you sure you want to save these changes to the booking?",
-      onConfirm: async () => {
-        try {
-          setActionModalVisible(false);
-          const { data: existingBooking, error: fetchError } = await supabase
-            .from('bookings')
-            .select('status, vehicle_variant_id')
-            .eq('id', updatedBooking.id)
-            .single();
-
-          if (fetchError) {
-            console.error('Fetch error:', fetchError);
-            return;
-          }
-
-          const { error } = await supabase
-            .from('bookings')
-            .update({
-              customer_name: updatedBooking.customer_name,
-              customer_email: updatedBooking.customer_email,
-              customer_phone: updatedBooking.customer_phone,
-              rental_start_date: updatedBooking.rental_start_date,
-              rental_end_date: updatedBooking.rental_end_date,
-              total_price: updatedBooking.total_price,
-              pickup_location: updatedBooking.pickup_location,
-              license_number: updatedBooking.license_number,
-              vehicle_id: updatedBooking.vehicle_id,
-              vehicle_variant_id: updatedBooking.vehicle_variant_id,
-              status: updatedBooking.status,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', updatedBooking.id);
-          if (error) {
-            console.error('Booking update error:', error);
-            return;
-          }
-
-          await fetchBookings();
-          await fetchAvailableVehicles();
-          closeEditModal();
-        } catch (error) {
-          console.error('Booking update error:', error);
-        }
-      },
-      onClose: () => setActionModalVisible(false),
-    });
-    setActionModalVisible(true);
+  const updateBooking = async (updatedBooking) => { 
+    try {
+      // Fetch existing booking (optional, if you need logic around variant changes)
+      const { data: existingBooking, error: fetchError } = await supabase
+        .from('bookings')
+        .select('status, vehicle_variant_id')
+        .eq('id', updatedBooking.id)
+        .single();
+  
+      if (fetchError) {
+        console.error('Fetch error:', fetchError);
+        Alert.alert('Error', 'Failed to fetch booking details');
+        return;
+      }
+  
+      // Update booking row
+      const { error } = await supabase
+        .from('bookings')
+        .update({
+          customer_name: updatedBooking.customer_name,
+          customer_email: updatedBooking.customer_email,
+          customer_phone: updatedBooking.customer_phone,
+          rental_start_date: updatedBooking.rental_start_date,
+          rental_end_date: updatedBooking.rental_end_date,
+          total_price: updatedBooking.total_price,
+          pickup_location: updatedBooking.pickup_location,
+          license_number: updatedBooking.license_number,
+          vehicle_id: updatedBooking.vehicle_id,
+          vehicle_variant_id: updatedBooking.vehicle_variant_id,
+          status: updatedBooking.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', updatedBooking.id);
+  
+      if (error) {
+        console.error('Booking update error:', error);
+        Alert.alert('Error', 'Failed to update booking');
+        return;
+      }
+  
+      await fetchBookings();
+      await fetchAvailableVehicles();
+      closeEditModal();
+      Alert.alert('Success', 'Booking updated successfully');
+    } catch (error) {
+      console.error('Booking update error:', error);
+      Alert.alert('Error', 'Something went wrong while updating booking');
+    }
   };
-
-
   
   
 
@@ -591,16 +568,17 @@ export default function BookingsScreen() {
     fetchBookings();
     fetchAvailableVehicles();
   };
-
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-PH", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
     });
   };
-
+  
+  
   const formatAmount = (amount) => {
     return `₱${parseFloat(amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
   };
@@ -944,6 +922,127 @@ export default function BookingsScreen() {
     );
   };
 
+
+  
+  // Enhanced Calendar Modal Component
+  const CalendarModal = ({ visible, onClose, onDateSelect, selectedDate, title }) => {
+    const [calendarAnimation] = useState(new Animated.Value(0));
+  
+    useEffect(() => {
+      if (visible) {
+        Animated.spring(calendarAnimation, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: true,
+        }).start();
+      } else {
+        Animated.timing(calendarAnimation, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+      }
+    }, [visible]);
+  
+    if (!visible) return null;
+  
+    return (
+      <Modal visible={visible} transparent animationType="none">
+        <TouchableOpacity 
+          style={styles.calendarModalOverlay} 
+          activeOpacity={1}
+          onPress={onClose}
+        >
+          <Animated.View 
+            style={[
+              styles.calendarModalContainer,
+              {
+                transform: [
+                  {
+                    scale: calendarAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.9, 1],
+                    }),
+                  },
+                ],
+                opacity: calendarAnimation,
+              },
+            ]}
+          >
+            {/* Header */}
+            <View style={styles.calendarModalHeader}>
+              <Text style={styles.calendarModalTitle}>{title || "Select Date"}</Text>
+              <TouchableOpacity onPress={onClose} style={styles.calendarCloseButton}>
+                <Ionicons name="close" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+  
+            {/* Calendar */}
+            <Calendar
+              onDayPress={(day) => {
+                onDateSelect(day.dateString);
+                onClose();
+              }}
+              markedDates={{
+                [selectedDate]: {
+                  selected: true,
+                  selectedColor: "#3b82f6",
+                  selectedTextColor: "#ffffff",
+                },
+              }}
+              theme={{
+                backgroundColor: "transparent",
+                calendarBackground: "transparent",
+                textSectionTitleColor: "#374151",
+                selectedDayBackgroundColor: "#3b82f6",
+                selectedDayTextColor: "#ffffff",
+                todayTextColor: "#ef4444",
+                dayTextColor: "#111827",
+                textDisabledColor: "#d1d5db",
+                arrowColor: "#3b82f6",
+                disabledArrowColor: "#d1d5db",
+                monthTextColor: "#111827",
+                indicatorColor: "#3b82f6",
+                textDayFontFamily: "System",
+                textMonthFontFamily: "System",
+                textDayHeaderFontFamily: "System",
+                textDayFontWeight: "400",
+                textMonthFontWeight: "600",
+                textDayHeaderFontWeight: "500",
+                textDayFontSize: 16,
+                textMonthFontSize: 18,
+                textDayHeaderFontSize: 13,
+                // Remove any time/GMT related styling
+                'stylesheet.calendar.header': {
+                  week: {
+                    marginTop: 5,
+                    flexDirection: 'row',
+                    justifyContent: 'space-around'
+                  }
+                }
+              }}
+              // Hide any time components
+              hideExtraDays={true}
+              firstDay={1}
+              showWeekNumbers={false}
+              onPressArrowLeft={subtractMonth => subtractMonth()}
+              onPressArrowRight={addMonth => addMonth()}
+            />
+  
+            {/* Footer with current selection */}
+            {selectedDate && (
+              <View style={styles.calendarFooter}>
+                <Text style={styles.selectedDateText}>
+                  Selected: {formatDate(selectedDate)}
+                </Text>
+              </View>
+            )}
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
+    );
+  };
   // Add Booking Modal Component
   
   const AddBookingModal = ({ isVisible, onClose, refreshBookings }) => {
@@ -1119,6 +1218,22 @@ export default function BookingsScreen() {
             isEdit={false} // ✅ hide status selector
           />
 </ScrollView>
+{datePickerVisible && (
+  <CalendarModal
+    visible={datePickerVisible}
+    onClose={() => setDatePickerVisible(false)}
+    onDateSelect={(dateString) => {
+      if (dateField === "start") {
+        setEditableBooking(prev => ({ ...prev, rental_start_date: dateString }));
+      } else {
+        setEditableBooking(prev => ({ ...prev, rental_end_date: dateString }));
+      }
+    }}
+    selectedDate={dateField === "start" ? editableBooking.rental_start_date : editableBooking.rental_end_date}
+    title={dateField === "start" ? "Select Start Date" : "Select End Date"}
+  />
+)}
+
 
   
           {/* Vehicle Picker Modal, Date Picker Modal ... (keep your same logic here) */}
@@ -1149,17 +1264,19 @@ export default function BookingsScreen() {
       }
     }, [selectedBooking]);
 
-    const handleSave = () => setConfirmVisible(true);
-    const handleConfirmSave = () => {
-      updateBooking(editableBooking);
-      setConfirmVisible(false);
-    };
+    // In EditBookingModal (you already have confirmVisible/deleteVisible)
+const handleSave = () => setConfirmVisible(true); // shows custom ActionModal
+const handleConfirmSave = () => {
+  // call updateBooking directly (it already uses supabase)
+  updateBooking(editableBooking);
+  setConfirmVisible(false);
+};
+const handleDelete = () => setDeleteVisible(true);
+const handleConfirmDelete = () => {
+  deleteBooking(editableBooking.id); // runs directly nowupda
+  setDeleteVisible(false); // close ActionModal
+};
 
-    const handleDelete = () => setDeleteVisible(true);
-  const handleConfirmDelete = () => {
-    deleteBooking(editableBooking.id);
-    setDeleteVisible(false);
-  };
 
 
     const selectedVehicle = availableVehicles.find(v => v.vehicle_id === editableBooking.vehicle_id)?.vehicles || editableBooking.vehicles || null;
@@ -1240,6 +1357,52 @@ const uniqueVehicles = React.useMemo(() => {
             </TouchableOpacity>
           </View>
         </ScrollView>
+        {datePickerVisible && (
+  <Modal transparent>
+    <View style={{ flex: 1, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}>
+    <Calendar
+  onDayPress={(day) => {
+    if (dateField === "start") {
+      setEditableBooking(prev => ({ ...prev, rental_start_date: day.dateString }));
+    } else {
+      setEditableBooking(prev => ({ ...prev, rental_end_date: day.dateString }));
+    }
+    setDatePickerVisible(false);
+  }}
+  markedDates={{
+    [editableBooking.rental_start_date]: {
+      selected: true,
+      selectedColor: "#3b82f6",
+      selectedTextColor: "white",
+    },
+    [editableBooking.rental_end_date]: {
+      selected: true,
+      selectedColor: "#10b981",
+      selectedTextColor: "white",
+    },
+  }}
+  theme={{
+    backgroundColor: "white",
+    calendarBackground: "white",
+    textSectionTitleColor: "#374151",
+    selectedDayBackgroundColor: "#3b82f6",
+    selectedDayTextColor: "#ffffff",
+    todayTextColor: "#ef4444",
+    dayTextColor: "#111827",
+    arrowColor: "#3b82f6",
+    monthTextColor: "#111827",
+    textMonthFontWeight: "bold",
+    textDayFontSize: 16,
+    textMonthFontSize: 18,
+    textDayHeaderFontSize: 14,
+  }}
+/>
+
+    </View>
+  </Modal>
+)}
+
+
         <ActionModal
           visible={confirmVisible}
           type="confirm"
@@ -1359,19 +1522,6 @@ const uniqueVehicles = React.useMemo(() => {
           </TouchableOpacity>
         </View>
       </View>
-      <View style={{ alignItems: 'center' }}>
-  <View style={styles.calendarContainer}>
-    <CalendarScreen
-      showHeader={true}
-      headerTitle="Rental Calendar"
-      headerSubtitle="Tap any date to view bookings"
-      showLegend={true}
-      containerStyle={{ backgroundColor: "transparent" }}
-      calendarStyle={{ backgroundColor: "transparent" }}
-    />
-  </View>
-</View>
-
 
       
 
@@ -1488,16 +1638,30 @@ const uniqueVehicles = React.useMemo(() => {
       <StatusDropdown />
       <DateDropdown />
       <VehicleTypeDropdown />
-  
+      
       {/* Modals */}
       <AddBookingModal
         isVisible={addModalVisible}
         onClose={() => setAddModalVisible(false)}
         refreshBookings={fetchBookings}
       />
-  
+      {actionModalConfig && (
+  <ActionModal
+    visible={!!actionModalConfig}
+    type="confirm"
+    title={actionModalConfig.title}
+    message={actionModalConfig.message}
+    onClose={() => setActionModalConfig(null)}
+    onConfirm={() => {
+      actionModalConfig.onConfirm();
+      setActionModalConfig(null);
+    }}
+  />
+)}
+
+
       <EditBookingModal />
-      
+
       {/* Main Content */}
       <FlatList
         data={getPaginatedBookings()}
@@ -1508,15 +1672,7 @@ const uniqueVehicles = React.useMemo(() => {
         refreshing={refreshing}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
-          <View>
-            {/* Calendar Component */}
-            
-            
-            {/* Original Header Content */}
-            {renderHeader()}
-          </View>
-        }
+        ListHeaderComponent={renderHeader()}
         ListFooterComponent={
           <View style={styles.paginationFooter}>
             {renderPagination()}
@@ -1525,36 +1681,130 @@ const uniqueVehicles = React.useMemo(() => {
       />
     </SafeAreaView>
   );
-  
- 
-  
 }
- // Add these styles to your existing StyleSheet
- const additionalStyles = StyleSheet.create({
-  calendarContainer: {
+const enhancedCalendarStyles = StyleSheet.create({
+  calendarModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  calendarModalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 16,
     width: '100%',
-    maxWidth: 400,
-    minHeight: 450,   // 👈 enough to fit header + month + days + legend
-    alignSelf: 'center',
-    marginTop: 16,
-    marginBottom: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    maxWidth: 380,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 15,
+    overflow: 'hidden',
+  },
+  calendarModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#f8fafc',
+  },
+  calendarModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  calendarCloseButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+  },
+  calendarModalFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    backgroundColor: '#f8fafc',
+  },
+  dateSelectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dateSelectionItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  dateSelectionLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  dateSelectionValue: {
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '600',
+  },
+  dateSelectionDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#e5e7eb',
+    marginHorizontal: 16,
   },
   
-  embeddedCalendar: {
-    flex: 0, // Override flex: 1 from the component
-    backgroundColor: 'transparent',
+  // Enhanced date input styling
+  dateInput: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1.5,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    minHeight: 50,
+  },
+  dateInputText: {
+    fontSize: 16,
+    color: '#1f2937',
+    fontWeight: '500',
+  },
+  placeholderText: {
+    color: '#9ca3af',
+    fontStyle: 'italic',
+    fontSize: 16,
   },
 });
 
 const styles = StyleSheet.create({
-  ...additionalStyles,
+  ...enhancedCalendarStyles,
+  dateInput: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    minHeight: 48,
+  },
+  dateInputText: {
+    fontSize: 16,
+    color: '#1f2937',
+    fontWeight: '500',
+  },
+  placeholderText: {
+    color: '#9ca3af',
+    fontStyle: 'italic',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f3f4f6',
@@ -2150,13 +2400,12 @@ const styles = StyleSheet.create({
     color: '#ef4444',
   },
   calendarContainer: {
-    marginTop: 12,
     backgroundColor: 'white',
     borderRadius: 12,
     padding: 16,
     width: '90%',
     maxWidth: 400,
-    
+    maxHeight: '70%',
   },
   calendarHeader: {
     flexDirection: 'row',

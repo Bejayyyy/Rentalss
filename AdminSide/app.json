@@ -2,7 +2,8 @@
   "expo": {
     "name": "AdminSide",
     "slug": "AdminSide",
-    "scheme": "adminside",  
+    "scheme": "adminside",
+    "platforms": ["ios", "android"], 
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
