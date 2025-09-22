@@ -3,7 +3,10 @@
     "name": "AdminSide",
     "slug": "AdminSide",
     "scheme": "adminside",
-    "platforms": ["ios", "android"], 
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,7 +18,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourname.adminside" 
+      "bundleIdentifier": "com.yourname.adminside"
     },
     "android": {
       "package": "com.yourname.adminside",
@@ -27,12 +30,25 @@
         {
           "action": "VIEW",
           "data": [
-            { "scheme": "adminside", "host": "*" }
+            {
+              "scheme": "adminside",
+              "host": "*"
+            }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
-    "web": { "favicon": "./assets/favicon.png" }
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3d23e6ba-ae01-42ff-a105-930a3e32c897"
+      }
+    }
   }
 }

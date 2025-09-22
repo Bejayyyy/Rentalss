@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback,useRef } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import {
   View,
   Text,
@@ -13,33 +13,23 @@ import {
   Platform,
   Dimensions,
   Modal,
-  TextInput,
   ScrollView,
+  ImageBackground,
+  TextInput,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { SafeAreaView } from "react-native-safe-area-context"
+import background from "../assets/background.jpg"
 import { supabase } from '../services/supabase'
+import ActionModal from "../components/AlertModal/ActionModal"
 
 const { width } = Dimensions.get("window")
 const isWeb = Platform.OS === "web"
 
-function useDebounce(callback, delay) {
-  const timeoutRef = useRef(null)
-
-  const debounced = (...args) => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    timeoutRef.current = setTimeout(() => {
-      callback(...args)
-    }, delay)
-  }
-
-  return debounced
-}
+// Pagination constants
+const ITEMS_PER_PAGE = 10
 
 export default function VehiclesScreen({ navigation }) {
- 
-const [debouncedText, setDebouncedText] = useState("");
-
   const [vehicles, setVehicles] = useState([])
   const [vehicleVariants, setVehicleVariants] = useState([])
   const [loading, setLoading] = useState(true)
@@ -48,9 +38,24 @@ const [debouncedText, setDebouncedText] = useState("");
   const [deleteModalVisible, setDeleteModalVisible] = useState(false)
   const [vehicleToDelete, setVehicleToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
+
+  const [feedbackModal, setFeedbackModal] = useState({
+    visible: false,
+    type: "success",
+    message: ""
+  })
   
-  // Updated search states - removed debounced search
-  const [searchText, setSearchText] = useState("")
+  // Filter dropdowns - ALL DROPDOWN STATES
+  const [showMakeFilter, setShowMakeFilter] = useState(false)
+  const [showSeatsFilter, setShowSeatsFilter] = useState(false)
+  const [showTypeFilter, setShowTypeFilter] = useState(false)
+  const [showPriceFilter, setShowPriceFilter] = useState(false)
+  const [selectedMake, setSelectedMake] = useState("all")
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1)
+  
+  // Advanced filter states
   const [showFilters, setShowFilters] = useState(false)
   const [selectedSeats, setSelectedSeats] = useState("all")
   const [selectedType, setSelectedType] = useState("all")
@@ -72,27 +77,92 @@ const [debouncedText, setDebouncedText] = useState("");
     return vehicleVariantsMap[vehicleId] || []
   }, [vehicleVariantsMap])
 
-  // Updated filteredVehicles - using searchText directly for immediate search
+  // Enhanced filteredVehicles with make filter
   const filteredVehicles = useMemo(() => {
-    let filtered = vehicles;
-  
-    if (debouncedText.trim() === "") return vehicles;
+    let filtered = vehicles
+
+    // Apply make filter
+    if (selectedMake !== "all") {
+      filtered = filtered.filter(vehicle => vehicle.make === selectedMake)
+    }
+
+    // Apply status filter
+    if (activeFilter !== "all") {
+      if (activeFilter === "available") {
+        filtered = filtered.filter(vehicle => vehicle.available)
+      } else if (activeFilter === "rented") {
+        filtered = filtered.filter(vehicle => !vehicle.available)
+      }
+    }
+
+    // Apply seats filter
+    if (selectedSeats !== "all") {
+      filtered = filtered.filter(vehicle => vehicle.seats === parseInt(selectedSeats))
+    }
+
+    // Apply type filter
+    if (selectedType !== "all") {
+      filtered = filtered.filter(vehicle => vehicle.type === selectedType)
+    }
+
+    // Apply price filter
+    if (priceRange !== "all") {
+      filtered = filtered.filter(vehicle => {
+        const price = parseFloat(vehicle.price_per_day || 0)
+        switch (priceRange) {
+          case "under-1000":
+            return price < 1000
+          case "1000-2000":
+            return price >= 1000 && price <= 2000
+          case "2000-5000":
+            return price >= 2000 && price <= 5000
+          case "over-5000":
+            return price > 5000
+          default:
+            return true
+        }
+      })
+    }
+
+    return filtered
+  }, [vehicles, selectedMake, activeFilter, selectedSeats, selectedType, priceRange])
+
+  // Paginated vehicles
+  const paginatedVehicles = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+    const endIndex = startIndex + ITEMS_PER_PAGE
+    return filteredVehicles.slice(startIndex, endIndex)
+  }, [filteredVehicles, currentPage])
+
+  // Pagination info
+  const paginationInfo = useMemo(() => {
+    const totalItems = filteredVehicles.length
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE)
+    const startItem = totalItems === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1
+    const endItem = Math.min(currentPage * ITEMS_PER_PAGE, totalItems)
     
-     const search = debouncedText.toLowerCase().trim();
-       return vehicles.filter(vehicle => {
-         const variants = getVehicleVariants(vehicle.id);
-         const colors = variants.map(v => v.color?.toLowerCase() || "").join(" ");
-         const searchableText = [
-           vehicle.make?.toLowerCase(),
-           vehicle.model?.toLowerCase(),
-           vehicle.year?.toString(),
-          vehicle.type?.toLowerCase(),
-          vehicle.price_per_day?.toString(),
-           colors
-         ].filter(Boolean).join(" ");
-         return searchableText.includes(search);
-       });
-    }, [vehicles, debouncedText, getVehicleVariants]);
+    return {
+      totalItems,
+      totalPages,
+      startItem,
+      endItem,
+      hasNextPage: currentPage < totalPages,
+      hasPrevPage: currentPage > 1
+    }
+  }, [filteredVehicles.length, currentPage])
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedMake, activeFilter, selectedSeats, selectedType, priceRange])
+
+  // Close dropdowns when activeFilter changes
+  useEffect(() => {
+    setShowMakeFilter(false)
+    setShowSeatsFilter(false)
+    setShowTypeFilter(false)
+    setShowPriceFilter(false)
+  }, [activeFilter])
   
   useEffect(() => {
     fetchVehicles()
@@ -231,6 +301,11 @@ const [debouncedText, setDebouncedText] = useState("");
   }
 
   // Optimize unique values calculation with memoization
+  const getUniqueMakes = useMemo(() => {
+    const makes = [...new Set(vehicles.map(v => v.make).filter(Boolean))]
+    return makes.sort()
+  }, [vehicles])
+
   const getUniqueSeats = useMemo(() => {
     const seats = [...new Set(vehicles.map(v => v.seats).filter(Boolean))]
     return seats.sort((a, b) => a - b)
@@ -242,12 +317,45 @@ const [debouncedText, setDebouncedText] = useState("");
   }, [vehicles])
 
   const clearAllFilters = useCallback(() => {
-    setSearchText("")
+    setSelectedMake("all")
     setSelectedSeats("all")
     setSelectedType("all")
     setPriceRange("all")
     setActiveFilter("all")
+    setCurrentPage(1)
+    // Close all dropdowns
+    setShowMakeFilter(false)
+    setShowSeatsFilter(false)
+    setShowTypeFilter(false)
+    setShowPriceFilter(false)
   }, [])
+
+  // Function to close all dropdowns
+  const closeAllDropdowns = useCallback(() => {
+    setShowMakeFilter(false)
+    setShowSeatsFilter(false)
+    setShowTypeFilter(false)
+    setShowPriceFilter(false)
+  }, [])
+
+  // Pagination handlers
+  const goToNextPage = useCallback(() => {
+    if (paginationInfo.hasNextPage) {
+      setCurrentPage(prev => prev + 1)
+    }
+  }, [paginationInfo.hasNextPage])
+
+  const goToPrevPage = useCallback(() => {
+    if (paginationInfo.hasPrevPage) {
+      setCurrentPage(prev => prev - 1)
+    }
+  }, [paginationInfo.hasPrevPage])
+
+  const goToPage = useCallback((page) => {
+    if (page >= 1 && page <= paginationInfo.totalPages) {
+      setCurrentPage(page)
+    }
+  }, [paginationInfo.totalPages])
 
   const showDeleteConfirmation = useCallback((vehicle) => {
     setVehicleToDelete(vehicle)
@@ -273,11 +381,20 @@ const [debouncedText, setDebouncedText] = useState("");
 
       if (error) {
         console.error('Error deleting vehicle:', error)
+        setFeedbackModal({
+          visible: true,
+          type: "error",
+          message: "Failed to delete vehicle"
+        })
         Alert.alert("Error", "Failed to delete vehicle")
         return
       }
 
-      Alert.alert("Success", "Vehicle deleted successfully")
+      setFeedbackModal({
+        visible: true,
+        type: "success",
+        message: "Vehicle deleted successfully"
+      })
       hideDeleteConfirmation()
       
       // Data will be updated automatically via real-time subscription
@@ -297,32 +414,20 @@ const [debouncedText, setDebouncedText] = useState("");
 
     return (
       <View style={styles.vehicleCard}>
-        <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: item.image_url || "https://via.placeholder.com/400x240?text=No+Image" }}
-            style={styles.vehicleImage}
-            resizeMode="cover"
-          />
-          <View style={styles.imageOverlay}>
-            <View style={[styles.statusBadge, { 
-              backgroundColor: item.available ? "#10b981" : "#ef4444",
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.25,
-              shadowRadius: 3.84,
-              elevation: 5,
-            }]}>
-              <Ionicons 
-                name={item.available ? "checkmark-circle" : "time"} 
-                size={14} 
-                color="white" 
-              />
-              <Text style={styles.statusText}>
-                {item.available ? "Available" : "Rented"}
-              </Text>
-            </View>
-          </View>
-        </View>
+         <View style={styles.imageContainer}>
+         <ImageBackground
+          source={background} // ✅ correct
+          style={styles.backgroundImage}
+          imageStyle={{ borderRadius: 12 }}
+        >
+      <Image
+        source={{ uri: item.image_url || "https://via.placeholder.com/400x240?text=No+Image" }}
+        style={styles.vehicleImage}
+        resizeMode="contain" // so car sits nicely "in front"
+      />
+    </ImageBackground>
+  </View>
+        
 
         <View style={styles.vehicleContent}>
           <View style={styles.vehicleHeader}>
@@ -582,12 +687,96 @@ const [debouncedText, setDebouncedText] = useState("");
     </Modal>
   )
 
+  // Pagination component
+  const renderPagination = () => {
+    if (paginationInfo.totalPages <= 1) return null
+
+    const renderPageButton = (page, isActive = false) => (
+      <TouchableOpacity
+        key={page}
+        style={[styles.pageButton, isActive && styles.activePageButton]}
+        onPress={() => goToPage(page)}
+      >
+        <Text style={[styles.pageButtonText, isActive && styles.activePageButtonText]}>
+          {page}
+        </Text>
+      </TouchableOpacity>
+    )
+
+    const renderPageButtons = () => {
+      const buttons = []
+      const { totalPages } = paginationInfo
+      
+      // Always show first page
+      if (currentPage > 3) {
+        buttons.push(renderPageButton(1))
+        if (currentPage > 4) {
+          buttons.push(
+            <Text key="dots1" style={styles.paginationDots}>...</Text>
+          )
+        }
+      }
+      
+      // Show pages around current page
+      for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+        buttons.push(renderPageButton(i, i === currentPage))
+      }
+      
+      // Always show last page
+      if (currentPage < totalPages - 2) {
+        if (currentPage < totalPages - 3) {
+          buttons.push(
+            <Text key="dots2" style={styles.paginationDots}>...</Text>
+          )
+        }
+        buttons.push(renderPageButton(totalPages))
+      }
+      
+      return buttons
+    }
+
+    return (
+      <View style={styles.paginationContainer}>
+        <View style={styles.paginationInfo}>
+          <Text style={styles.paginationText}>
+            Showing {paginationInfo.startItem}-{paginationInfo.endItem} of {paginationInfo.totalItems} vehicles
+          </Text>
+        </View>
+        
+        <View style={styles.paginationControls}>
+          <TouchableOpacity
+            style={[styles.paginationButton, !paginationInfo.hasPrevPage && styles.paginationButtonDisabled]}
+            onPress={goToPrevPage}
+            disabled={!paginationInfo.hasPrevPage}
+          >
+            <Ionicons name="chevron-back" size={16} color={paginationInfo.hasPrevPage ? "#374151" : "#9ca3af"} />
+            <Text style={[styles.paginationButtonText, !paginationInfo.hasPrevPage && styles.paginationButtonTextDisabled]}>
+              Previous
+            </Text>
+          </TouchableOpacity>
+          
+          <View style={styles.pageNumbers}>
+            {renderPageButtons()}
+          </View>
+          
+          <TouchableOpacity
+            style={[styles.paginationButton, !paginationInfo.hasNextPage && styles.paginationButtonDisabled]}
+            onPress={goToNextPage}
+            disabled={!paginationInfo.hasNextPage}
+          >
+            <Text style={[styles.paginationButtonText, !paginationInfo.hasNextPage && styles.paginationButtonTextDisabled]}>
+              Next
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={paginationInfo.hasNextPage ? "#374151" : "#9ca3af"} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    )
+  }
+
   const renderHeader = () => {
     const stats = getVehicleStats()
- 
-    const debouncedSearch = useDebounce((text) => {
-      setDebouncedText(text);
-    }, 300);
+
     return (
       <>
         {/* Header with Enhanced Design */}
@@ -664,52 +853,251 @@ const [debouncedText, setDebouncedText] = useState("");
           </View>
         </View>
 
-        {/* Immediate Search Section */}
-      
-<View style={styles.searchSection}>
-  <View style={styles.searchContainer}>
-    <View style={styles.searchInputContainer}>
-      <Ionicons name="search" size={20} color="#6b7280" style={styles.searchIcon} />
+        {/* Filter Dropdowns Section - FIXED VERSION */}
+        <View style={styles.filterDropdownsSection}>
+          <Text style={styles.filterDropdownsTitle}>Filter Vehicles</Text>
+          
+          <View style={styles.filterDropdownsGrid}>
+            {/* Make Filter Dropdown */}
+            <View style={styles.filterDropdownContainer}>
+              <Text style={styles.filterDropdownLabel}>Make</Text>
+              <TouchableOpacity
+                style={[styles.filterDropdown, selectedMake !== "all" && styles.filterDropdownActive]}
+                onPress={() => {
+                  setShowMakeFilter(!showMakeFilter)
+                  // Close other dropdowns
+                  setShowSeatsFilter(false)
+                  setShowTypeFilter(false)
+                  setShowPriceFilter(false)
+                }}
+              >
+                <Text style={[styles.filterDropdownText, selectedMake !== "all" && styles.filterDropdownTextActive]}>
+                  {selectedMake === "all" ? "All Makes" : selectedMake}
+                </Text>
+                <Ionicons 
+                  name={showMakeFilter ? "chevron-up" : "chevron-down"} 
+                  size={16} 
+                  color={selectedMake !== "all" ? "white" : "#6b7280"} 
+                />
+              </TouchableOpacity>
+              
+              {showMakeFilter && (
+                <View style={styles.filterDropdownMenu}>
+                  <TouchableOpacity
+                    style={styles.filterDropdownItem}
+                    onPress={() => {
+                      setSelectedMake("all")
+                      setShowMakeFilter(false)
+                    }}
+                  >
+                    <Text style={[styles.filterDropdownItemText, selectedMake === "all" && styles.filterDropdownItemTextActive]}>
+                      All Makes
+                    </Text>
+                  </TouchableOpacity>
+                  {getUniqueMakes.map(make => (
+                    <TouchableOpacity
+                      key={make}
+                      style={styles.filterDropdownItem}
+                      onPress={() => {
+                        setSelectedMake(make)
+                        setShowMakeFilter(false)
+                      }}
+                    >
+                      <Text style={[styles.filterDropdownItemText, selectedMake === make && styles.filterDropdownItemTextActive]}>
+                        {make}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
 
-      <TextInput
-  style={styles.searchInput}
-  placeholder="Search vehicles..."
-  value={searchText}
-  onChangeText={(text) => {
-    setSearchText(text);        // always update visible text
-    debouncedSearch(text);      // update filtering after 300ms
-  }}
-  placeholderTextColor="#9ca3af"
-  autoCorrect={false}
-  autoCapitalize="none"
-  returnKeyType="search"
-  clearButtonMode="while-editing"
-/>
+            {/* Seats Filter Dropdown - FIXED */}
+            <View style={styles.filterDropdownContainer}>
+              <Text style={styles.filterDropdownLabel}>Seats</Text>
+              <TouchableOpacity
+                style={[styles.filterDropdown, selectedSeats !== "all" && styles.filterDropdownActive]}
+                onPress={() => {
+                  setShowSeatsFilter(!showSeatsFilter)
+                  // Close other dropdowns
+                  setShowMakeFilter(false)
+                  setShowTypeFilter(false)
+                  setShowPriceFilter(false)
+                }}
+              >
+                <Text style={[styles.filterDropdownText, selectedSeats !== "all" && styles.filterDropdownTextActive]}>
+                  {selectedSeats === "all" ? "All Seats" : `${selectedSeats} seats`}
+                </Text>
+                <Ionicons 
+                  name={showSeatsFilter ? "chevron-up" : "chevron-down"} 
+                  size={16} 
+                  color={selectedSeats !== "all" ? "white" : "#6b7280"} 
+                />
+              </TouchableOpacity>
+              
+              {showSeatsFilter && (
+                <View style={styles.filterDropdownMenu}>
+                  <TouchableOpacity
+                    style={styles.filterDropdownItem}
+                    onPress={() => {
+                      setSelectedSeats("all")
+                      setShowSeatsFilter(false)
+                    }}
+                  >
+                    <Text style={[styles.filterDropdownItemText, selectedSeats === "all" && styles.filterDropdownItemTextActive]}>
+                      All Seats
+                    </Text>
+                  </TouchableOpacity>
+                  {getUniqueSeats.map(seats => (
+                    <TouchableOpacity
+                      key={seats}
+                      style={styles.filterDropdownItem}
+                      onPress={() => {
+                        setSelectedSeats(seats.toString())
+                        setShowSeatsFilter(false)
+                      }}
+                    >
+                      <Text style={[styles.filterDropdownItemText, selectedSeats === seats.toString() && styles.filterDropdownItemTextActive]}>
+                        {seats} seats
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+          
+          <View style={styles.filterDropdownsGrid}>
+            {/* Type Filter Dropdown - FIXED */}
+            <View style={styles.filterDropdownContainer}>
+              <Text style={styles.filterDropdownLabel}>Type</Text>
+              <TouchableOpacity
+                style={[styles.filterDropdown, selectedType !== "all" && styles.filterDropdownActive]}
+                onPress={() => {
+                  setShowTypeFilter(!showTypeFilter)
+                  // Close other dropdowns
+                  setShowMakeFilter(false)
+                  setShowSeatsFilter(false)
+                  setShowPriceFilter(false)
+                }}
+              >
+                <Text style={[styles.filterDropdownText, selectedType !== "all" && styles.filterDropdownTextActive]}>
+                  {selectedType === "all" ? "All Types" : selectedType}
+                </Text>
+                <Ionicons 
+                  name={showTypeFilter ? "chevron-up" : "chevron-down"} 
+                  size={16} 
+                  color={selectedType !== "all" ? "white" : "#6b7280"} 
+                />
+              </TouchableOpacity>
+              
+              {showTypeFilter && (
+                <View style={styles.filterDropdownMenu}>
+                  <TouchableOpacity
+                    style={styles.filterDropdownItem}
+                    onPress={() => {
+                      setSelectedType("all")
+                      setShowTypeFilter(false)
+                    }}
+                  >
+                    <Text style={[styles.filterDropdownItemText, selectedType === "all" && styles.filterDropdownItemTextActive]}>
+                      All Types
+                    </Text>
+                  </TouchableOpacity>
+                  {getUniqueTypes.map(type => (
+                    <TouchableOpacity
+                      key={type}
+                      style={styles.filterDropdownItem}
+                      onPress={() => {
+                        setSelectedType(type)
+                        setShowTypeFilter(false)
+                      }}
+                    >
+                      <Text style={[styles.filterDropdownItemText, selectedType === type && styles.filterDropdownItemTextActive]}>
+                        {type}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
 
-
-{searchText.length > 0 && (
-  <TouchableOpacity
-    style={styles.searchClearButton}
-    onPress={() => {
-      setSearchText("");
-      setDebouncedText("");
-    }}
-  >
-    <Ionicons name="close-circle" size={20} color="#6b7280" />
-  </TouchableOpacity>
-      )}
-    </View>
-  </View>
-</View>
-
+            {/* Price Filter Dropdown - FIXED */}
+            <View style={styles.filterDropdownContainer}>
+              <Text style={styles.filterDropdownLabel}>Price Range</Text>
+              <TouchableOpacity
+                style={[styles.filterDropdown, priceRange !== "all" && styles.filterDropdownActive]}
+                onPress={() => {
+                  setShowPriceFilter(!showPriceFilter)
+                  // Close other dropdowns
+                  setShowMakeFilter(false)
+                  setShowSeatsFilter(false)
+                  setShowTypeFilter(false)
+                }}
+              >
+                <Text style={[styles.filterDropdownText, priceRange !== "all" && styles.filterDropdownTextActive]}>
+                  {priceRange === "all" ? "All Prices" : 
+                   priceRange === "under-1000" ? "Under ₱1,000" :
+                   priceRange === "1000-2000" ? "₱1,000-₱2,000" :
+                   priceRange === "2000-5000" ? "₱2,000-₱5,000" :
+                   priceRange === "over-5000" ? "Over ₱5,000" : "All Prices"
+                  }
+                </Text>
+                <Ionicons 
+                  name={showPriceFilter ? "chevron-up" : "chevron-down"} 
+                  size={16} 
+                  color={priceRange !== "all" ? "white" : "#6b7280"} 
+                />
+              </TouchableOpacity>
+              
+              {showPriceFilter && (
+                <View style={styles.filterDropdownMenu}>
+                  {[
+                    { key: "all", label: "All Prices" },
+                    { key: "under-1000", label: "Under ₱1,000" },
+                    { key: "1000-2000", label: "₱1,000 - ₱2,000" },
+                    { key: "2000-5000", label: "₱2,000 - ₱5,000" },
+                    { key: "over-5000", label: "Over ₱5,000" }
+                  ].map(option => (
+                    <TouchableOpacity
+                      key={option.key}
+                      style={styles.filterDropdownItem}
+                      onPress={() => {
+                        setPriceRange(option.key)
+                        setShowPriceFilter(false)
+                      }}
+                    >
+                      <Text style={[styles.filterDropdownItemText, priceRange === option.key && styles.filterDropdownItemTextActive]}>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+          
+          {/* Clear Filters Button */}
+          {(selectedMake !== "all" || selectedSeats !== "all" || selectedType !== "all" || priceRange !== "all") && (
+            <TouchableOpacity
+              style={styles.clearAllFiltersButton}
+              onPress={clearAllFilters}
+            >
+              <Ionicons name="refresh" size={16} color="#ef4444" />
+              <Text style={styles.clearAllFiltersText}>Clear All Filters</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* Enhanced Filter Section */}
         <View style={styles.filterSection}>
           <View style={styles.filterHeader}>
             <Text style={styles.sectionTitle}>Vehicle Overview</Text>
-            <Text style={styles.sectionSubtitle}>
-              {filteredVehicles.length} vehicles
-            </Text>
+            <View style={styles.filterHeaderActions}>
+              <Text style={styles.sectionSubtitle}>
+                {filteredVehicles.length} vehicles
+              </Text>
+            </View>
           </View>
           
           <View style={styles.filterTabs}>
@@ -749,7 +1137,7 @@ const [debouncedText, setDebouncedText] = useState("");
         </View>
 
         {/* Active Filters Display */}
-        {(searchText || selectedSeats !== "all" || selectedType !== "all" || priceRange !== "all") && (
+        {(selectedMake !== "all" || selectedSeats !== "all" || selectedType !== "all" || priceRange !== "all") && (
           <View style={styles.activeFiltersSection}>
             <View style={styles.activeFiltersHeader}>
               <Text style={styles.activeFiltersTitle}>Active Filters</Text>
@@ -762,10 +1150,10 @@ const [debouncedText, setDebouncedText] = useState("");
             </View>
             
             <View style={styles.activeFiltersList}>
-              {searchText && (
+              {selectedMake !== "all" && (
                 <View style={styles.activeFilter}>
-                  <Text style={styles.activeFilterText}>Search: "{searchText}"</Text>
-                  <TouchableOpacity onPress={() => setSearchText("")}>
+                  <Text style={styles.activeFilterText}>{selectedMake}</Text>
+                  <TouchableOpacity onPress={() => setSelectedMake("all")}>
                     <Ionicons name="close" size={16} color="#6b7280" />
                   </TouchableOpacity>
                 </View>
@@ -812,18 +1200,18 @@ const [debouncedText, setDebouncedText] = useState("");
         <Ionicons name="car-outline" size={64} color="#d1d5db" />
       </View>
       <Text style={styles.emptyStateTitle}>
-        {activeFilter === "all" && !searchText && selectedSeats === "all" && selectedType === "all" && priceRange === "all" 
+        {activeFilter === "all" && selectedMake === "all" && selectedSeats === "all" && selectedType === "all" && priceRange === "all" 
           ? "No vehicles yet" 
           : "No vehicles found"
         }
       </Text>
       <Text style={styles.emptyStateDescription}>
-        {activeFilter === "all" && !searchText && selectedSeats === "all" && selectedType === "all" && priceRange === "all"
+        {activeFilter === "all" && selectedMake === "all" && selectedSeats === "all" && selectedType === "all" && priceRange === "all"
           ? "Add your first vehicle to get started with your rental business"
-          : "Try adjusting your search or filters to find what you're looking for"
+          : "Try adjusting your filters to find what you're looking for"
         }
       </Text>
-      {(searchText || selectedSeats !== "all" || selectedType !== "all" || priceRange !== "all") ? (
+      {(selectedMake !== "all" || selectedSeats !== "all" || selectedType !== "all" || priceRange !== "all") ? (
         <TouchableOpacity
           style={styles.emptyStateButton}
           onPress={clearAllFilters}
@@ -845,11 +1233,21 @@ const [debouncedText, setDebouncedText] = useState("");
 
   return (
     <SafeAreaView style={styles.container}>
+      <ActionModal
+        visible={feedbackModal.visible}
+        type={feedbackModal.type}
+        title={feedbackModal.type === "success" ? "Success" : "Error"}
+        message={feedbackModal.message}
+        confirmText="OK"
+        onClose={() => setFeedbackModal({ visible: false, type: "success", message: "" })}
+        onConfirm={() => setFeedbackModal({ visible: false, type: "success", message: "" })}
+      />
       <FlatList
-        data={filteredVehicles}
+        data={paginatedVehicles}
         renderItem={renderVehicleItem}
         keyExtractor={(item) => item.id.toString()}
         ListHeaderComponent={renderHeader}
+        ListFooterComponent={renderPagination}
         refreshControl={
           <RefreshControl 
             refreshing={loading} 
@@ -863,7 +1261,6 @@ const [debouncedText, setDebouncedText] = useState("");
         numColumns={1}
         ListEmptyComponent={!loading ? renderEmptyState : null}
         ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-        // Optimize FlatList performance for immediate search
         removeClippedSubviews={true}
         maxToRenderPerBatch={10}
         updateCellsBatchingPeriod={50}
@@ -988,19 +1385,39 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginLeft: 4,
   },
-  // Search Section Styles
-  searchSection: {
+  // Filter Dropdowns Section
+  filterDropdownsSection: {
     paddingHorizontal: 20,
     paddingTop: 24,
+    paddingBottom: 16,
   },
-  searchContainer: {
+  filterDropdownsTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 16,
+  },
+  filterDropdownsGrid: {
     flexDirection: "row",
     gap: 12,
+    marginBottom: 12,
   },
-  searchInputContainer: {
+  filterDropdownContainer: {
     flex: 1,
+    position: "relative",
+  },
+  filterDropdownLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6b7280",
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  filterDropdown: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: "white",
     borderRadius: 12,
     paddingHorizontal: 16,
@@ -1013,52 +1430,69 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#f1f5f9",
   },
-  searchIcon: {
-    marginRight: 12,
+  filterDropdownActive: {
+    backgroundColor: "#222",
+    borderColor: "#222",
   },
-  searchInput: {
-    flex: 1,
+  filterDropdownText: {
     fontSize: 14,
-    color: "#111827",
     fontWeight: "500",
+    color: "#111827",
+    flex: 1,
   },
-  searchClearButton: {
-    marginLeft: 8,
+  filterDropdownTextActive: {
+    color: "white",
   },
-  filtersButton: {
-    width: 48,
-    height: 48,
+  filterDropdownMenu: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
     backgroundColor: "white",
     borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
+    marginTop: 4,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
-    position: "relative",
+    borderColor: "#e5e7eb",
+    zIndex: 1000,
+    maxHeight: 200,
   },
-  filtersButtonActive: {
-    backgroundColor: "#222",
+  filterDropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
   },
-  filtersBadge: {
-    position: "absolute",
-    top: -4,
-    right: -4,
-    backgroundColor: "#ef4444",
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    justifyContent: "center",
-    alignItems: "center",
+  filterDropdownItemText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#374151",
   },
-  filtersBadgeText: {
-    color: "white",
-    fontSize: 10,
+  filterDropdownItemTextActive: {
+    color: "#222",
     fontWeight: "600",
+  },
+  clearAllFiltersButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fef2f2",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    gap: 6,
+  },
+  clearAllFiltersText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#ef4444",
   },
   filterSection: {
     paddingHorizontal: 20,
@@ -1070,6 +1504,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-end",
     marginBottom: 16,
+  },
+  filterHeaderActions: {
+    alignItems: "flex-end",
   },
   sectionTitle: {
     fontSize: 20,
@@ -1279,9 +1716,86 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "white",
   },
+  // Pagination Styles
+  paginationContainer: {
+    backgroundColor: "white",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+    marginTop: 20,
+  },
+  paginationInfo: {
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  paginationText: {
+    fontSize: 14,
+    color: "#6b7280",
+    fontWeight: "500",
+  },
+  paginationControls: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  paginationButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    gap: 4,
+  },
+  paginationButtonDisabled: {
+    opacity: 0.5,
+  },
+  paginationButtonText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#374151",
+  },
+  paginationButtonTextDisabled: {
+    color: "#9ca3af",
+  },
+  pageNumbers: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  pageButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  activePageButton: {
+    backgroundColor: "#222",
+    borderColor: "#222",
+  },
+  pageButtonText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#374151",
+  },
+  activePageButtonText: {
+    color: "white",
+  },
+  paginationDots: {
+    fontSize: 14,
+    color: "#9ca3af",
+    paddingHorizontal: 4,
+  },
   listContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 120,
+    paddingBottom: 20,
   },
   vehicleCard: {
     backgroundColor: "white",
@@ -1299,28 +1813,15 @@ const styles = StyleSheet.create({
     position: "relative",
     height: 200,
   },
-  vehicleImage: {
+  backgroundImage: {
     width: "100%",
-    height: "100%",
-    backgroundColor: "#f3f4f6",
-  },
-  imageOverlay: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-  },
-  statusBadge: {
-    flexDirection: "row",
+    height: 200,
+    justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
   },
-  statusText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "600",
-    marginLeft: 4,
+  vehicleImage: {
+    width: "90%",
+    height: 180,
   },
   vehicleContent: {
     padding: 20,
@@ -1602,4 +2103,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "white",
   },
-})
+}) 

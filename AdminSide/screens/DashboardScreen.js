@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../services/supabase';
+import ActionModal from '../components/AlertModal/ActionModal';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -23,6 +24,8 @@ const isWeb = Platform.OS === 'web';
 // Notification Bell Component
 const NotificationBell = ({ notifications, onPress }) => {
   const [bellAnimation] = useState(new Animated.Value(0));
+  
+
   const unreadCount = notifications.filter(n => !n.read).length;
 
   useEffect(() => {
@@ -73,7 +76,7 @@ const NotificationBell = ({ notifications, onPress }) => {
 };
 
 // Notification Item Component
-const NotificationItem = ({ notification, onMarkRead, onRemove }) => {
+const NotificationItem = ({ notification, onMarkRead, onRemove, setActionModalConfig }) => {
   const [showActions, setShowActions] = useState(false);
 
   const getNotificationIcon = (type) => {
@@ -113,25 +116,14 @@ const NotificationItem = ({ notification, onMarkRead, onRemove }) => {
   };
 
   const handleRemove = () => {
-    Alert.alert(
-      'Remove Notification',
-      'Are you sure you want to remove this notification?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-          onPress: () => setShowActions(false),
-        },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            onRemove(notification.id);
-            setShowActions(false);
-          },
-        },
-      ]
-    );
+    setActionModalConfig({
+      title: 'Remove Notification',
+      message: 'Are you sure you want to remove this notification?',
+      onConfirm: () => {
+        onRemove(notification.id);
+        setShowActions(false);
+      }
+    });
   };
 
   return (
@@ -204,7 +196,7 @@ const NotificationItem = ({ notification, onMarkRead, onRemove }) => {
 };
 
 // Notifications Modal Component
-const NotificationsModal = ({ visible, notifications, onClose, onMarkRead, onMarkAllRead, onRemove }) => {
+const NotificationsModal = ({ visible, notifications, onClose, onMarkRead, onMarkAllRead, onRemove,setActionModalConfig }) => {
   return (
     <Modal
       visible={visible}
@@ -236,6 +228,7 @@ const NotificationsModal = ({ visible, notifications, onClose, onMarkRead, onMar
               notification={item} 
               onMarkRead={onMarkRead}
               onRemove={onRemove}
+              setActionModalConfig={setActionModalConfig}
             />
           )}
           contentContainerStyle={styles.notificationsList}
@@ -268,6 +261,10 @@ export default function DashboardScreen({ navigation }) {
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [feedbackModal, setFeedbackModal] = useState({ visible: false, type: "success", message: "" });
+  const [actionModalConfig, setActionModalConfig] = useState(null);
+
+
 
   // Get current user
   useEffect(() => {
@@ -639,12 +636,22 @@ export default function DashboardScreen({ navigation }) {
   }, [currentUserId]);
 
   const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error('Logout error:', error);
-      Alert.alert('Error', 'Failed to logout');
-    }
+    setActionModalConfig({
+      title: 'Logout',
+      message: 'Are you sure you want to logout?',
+      onConfirm: async () => {
+        try {
+          await supabase.auth.signOut();
+        } catch (error) {
+          console.error('Logout error:', error);
+          setFeedbackModal({ 
+            visible: true, 
+            type: "error", 
+            message: "Failed to logout. Please try again." 
+          });
+        }
+      }
+    });
   };
 
   const handleMarkNotificationRead = async (notificationId) => {
@@ -705,18 +712,25 @@ export default function DashboardScreen({ navigation }) {
       setNotifications(prev => 
         prev.filter(notif => notif.id !== notificationId)
       );
-
+  
       // Mark as dismissed in database (don't delete to preserve history)
       const { error } = await supabase
         .from('notifications')
         .update({ dismissed: true })
         .eq('id', notificationId)
         .eq('user_id', currentUserId);
-
+  
       if (error) {
         console.error('Error dismissing notification:', error);
         // Fetch fresh data if update fails
         fetchNotifications();
+      } else {
+        // Show success feedback
+        setFeedbackModal({ 
+          visible: true, 
+          type: "success", 
+          message: "Notification removed successfully!" 
+        });
       }
     } catch (err) {
       console.error('Error removing notification:', err);
@@ -981,6 +995,33 @@ export default function DashboardScreen({ navigation }) {
         onMarkRead={handleMarkNotificationRead}
         onMarkAllRead={handleMarkAllRead}
         onRemove={handleRemoveNotification}
+        setActionModalConfig={setActionModalConfig}
+      />
+
+      {/* Action Modal */}
+      {actionModalConfig && (
+        <ActionModal
+          visible={!!actionModalConfig}
+          type="confirm"
+          title={actionModalConfig.title}
+          message={actionModalConfig.message}
+          onClose={() => setActionModalConfig(null)}
+          onConfirm={() => {
+            actionModalConfig.onConfirm();
+            setActionModalConfig(null);
+          }}
+        />
+      )}
+
+      {/* Feedback Modal */}
+      <ActionModal
+        visible={feedbackModal.visible}
+        type={feedbackModal.type}
+        title={feedbackModal.type === "success" ? "Success" : "Error"}
+        message={feedbackModal.message}
+        confirmText="OK"
+        onClose={() => setFeedbackModal({ visible: false, type: "success", message: "" })}
+        onConfirm={() => setFeedbackModal({ visible: false, type: "success", message: "" })}
       />
     </SafeAreaView>
   );
@@ -990,7 +1031,7 @@ const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: 'white', 
-    paddingHorizontal: 16, 
+    paddingHorizontal: 18, 
     paddingTop: 8 
   },
   header: { 

@@ -22,10 +22,14 @@ import { Dropdown } from 'react-native-element-dropdown';
 import { Button } from 'react-native';
 import BookingForm from '../components/BookingScreen/BookingForm';
 import ActionModal from '../components/AlertModal/ActionModal';
+import EditBookingModal from '../components/BookingScreen/EditBookingModal';
+import AddBookingModal from '../components/BookingScreen/AddBookingModal';
+import EmailService from '../services/emailService';
 
 const { width } = Dimensions.get('window');
 
 export default function BookingsScreen() {
+  
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [bookings, setBookings] = useState([]);
   const [filteredBookings, setFilteredBookings] = useState([]);
@@ -49,6 +53,7 @@ export default function BookingsScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [addBookingModalVisible, setAddBookingModalVisible] = useState(false);
 
+  const [dateField, setDateField] = useState(null);
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(5);
@@ -65,6 +70,56 @@ export default function BookingsScreen() {
   const [statusDropdownVisible, setStatusDropdownVisible] = useState(false);
   const [dateDropdownVisible, setDateDropdownVisible] = useState(false);
   const [vehicleTypeDropdownVisible, setVehicleTypeDropdownVisible] = useState(false);
+  const [feedbackModal, setFeedbackModal] = useState({
+    visible: false,
+    type: "success", // or "error"
+    message: "",
+  });
+  const handleOpenCalendar = (field) => {
+    setDateField(field);
+    setCalendarModalVisible(true);
+};
+
+// Add Booking Modal 
+
+const [addModalAnimation] = useState(new Animated.Value(0));
+// Add this function to handle opening the add modal:
+const openAddModal = useCallback(() => {
+  setAddBookingModalVisible(true);
+  Animated.timing(addModalAnimation, {
+    toValue: 1,
+    duration: 300,
+    useNativeDriver: true,
+  }).start();
+}, [addModalAnimation]);
+
+// Add this function to handle closing the add modal:
+const closeAddModal = useCallback(() => {
+  Animated.timing(addModalAnimation, {
+    toValue: 0,
+    duration: 200,
+    useNativeDriver: true,
+  }).start(() => {
+    setAddBookingModalVisible(false);
+  });
+}, [addModalAnimation]);
+
+// Add this function to handle when a booking is added:
+const handleBookingAdded = async (newBooking) => {
+  // Refresh the bookings list
+  await fetchBookings();
+  await fetchAvailableVehicles();
+  
+  // Show success feedback
+  setFeedbackModal({
+    visible: true,
+    type: "success",
+    message: "Booking added successfully!",
+  });
+};
+
+
+//
 
   // Animation values
   const modalAnimation = useState(new Animated.Value(0))[0];
@@ -178,7 +233,8 @@ export default function BookingsScreen() {
         vehicles (
           make,
           model,
-          year
+          year,
+          price_per_day
         )
       `)
       .gt('available_quantity', 0); // only show available ones
@@ -267,13 +323,21 @@ export default function BookingsScreen() {
       await fetchBookings();
       await fetchAvailableVehicles();
       closeEditModal();
-      Alert.alert("Success", "Booking deleted successfully");
+  
+      setFeedbackModal({
+        visible: true,
+        type: "success",
+        message: "Booking deleted successfully!",
+      });
     } catch (err) {
       console.error("Delete booking error:", err);
-      Alert.alert("Error", "Something went wrong while deleting booking");
+      setFeedbackModal({
+        visible: true,
+        type: "error",
+        message: "Something went wrong while deleting booking",
+      });
     }
   };
-  
   
 
   const filterBookings = () => {
@@ -511,55 +575,184 @@ const showConfirmation = (title, message, onConfirm) => {
     );
   };
 
-  const updateBooking = async (updatedBooking) => { 
-    try {
-      // Fetch existing booking (optional, if you need logic around variant changes)
-      const { data: existingBooking, error: fetchError } = await supabase
-        .from('bookings')
-        .select('status, vehicle_variant_id')
-        .eq('id', updatedBooking.id)
-        .single();
+  const updateBooking = async (updatedBooking) => {      
+    try {       
+      // Fetch the existing booking to compare status changes
+      const { data: existingBooking, error: fetchError } = await supabase         
+        .from('bookings')         
+        .select('status, vehicle_variant_id, customer_email, customer_name')         
+        .eq('id', updatedBooking.id)         
+        .single();          
   
-      if (fetchError) {
-        console.error('Fetch error:', fetchError);
-        Alert.alert('Error', 'Failed to fetch booking details');
-        return;
+      if (fetchError) {         
+        console.error('Fetch error:', fetchError);         
+        setFeedbackModal({           
+          visible: true,           
+          type: "error",           
+          message: "Failed to fetch booking details",         
+        });         
+        return;       
       }
   
-      // Update booking row
-      const { error } = await supabase
-        .from('bookings')
-        .update({
-          customer_name: updatedBooking.customer_name,
-          customer_email: updatedBooking.customer_email,
-          customer_phone: updatedBooking.customer_phone,
-          rental_start_date: updatedBooking.rental_start_date,
-          rental_end_date: updatedBooking.rental_end_date,
-          total_price: updatedBooking.total_price,
-          pickup_location: updatedBooking.pickup_location,
-          license_number: updatedBooking.license_number,
-          vehicle_id: updatedBooking.vehicle_id,
-          vehicle_variant_id: updatedBooking.vehicle_variant_id,
-          status: updatedBooking.status,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', updatedBooking.id);
+      // Handle quantity adjustments based on status changes
+      const oldStatus = existingBooking.status;
+      const newStatus = updatedBooking.status;
+      const variantId = updatedBooking.vehicle_variant_id || existingBooking.vehicle_variant_id;
   
-      if (error) {
-        console.error('Booking update error:', error);
-        Alert.alert('Error', 'Failed to update booking');
-        return;
+      // Define status changes that affect vehicle availability
+      const reservingStatuses = ['confirmed']; // Statuses that reserve a vehicle
+      const releasingStatuses = ['completed', 'cancelled']; // Statuses that release a vehicle
+      
+      let quantityAdjustment = 0;
+      
+      // Determine if we need to adjust quantities
+      if (oldStatus !== newStatus && variantId) {
+        const wasReserving = reservingStatuses.includes(oldStatus);
+        const isReserving = reservingStatuses.includes(newStatus);
+        const wasReleasing = releasingStatuses.includes(oldStatus);
+        const isReleasing = releasingStatuses.includes(newStatus);
+        
+        if (!wasReserving && isReserving) {
+          // Moving from non-reserving to reserving status (e.g., pending -> confirmed)
+          quantityAdjustment = -1; // Decrease available quantity
+        } else if (wasReserving && isReleasing) {
+          // Moving from reserving to releasing status (e.g., confirmed -> completed/cancelled)
+          quantityAdjustment = +1; // Increase available quantity
+        } else if (wasReserving && !isReserving && !isReleasing) {
+          // Moving from reserving to non-reserving, non-releasing status (e.g., confirmed -> pending)
+          quantityAdjustment = +1; // Increase available quantity
+        }
       }
   
-      await fetchBookings();
-      await fetchAvailableVehicles();
-      closeEditModal();
-      Alert.alert('Success', 'Booking updated successfully');
-    } catch (error) {
-      console.error('Booking update error:', error);
-      Alert.alert('Error', 'Something went wrong while updating booking');
-    }
+      // Check if we have enough vehicles available for reservation
+      if (quantityAdjustment < 0) {
+        const { data: variantData, error: variantError } = await supabase
+          .from('vehicle_variants')
+          .select('available_quantity')
+          .eq('id', variantId)
+          .single();
+  
+        if (variantError || !variantData) {
+          console.error('Error checking variant availability:', variantError);
+          setFeedbackModal({
+            visible: true,
+            type: "error",
+            message: "Failed to check vehicle availability",
+          });
+          return;
+        }
+  
+        if (variantData.available_quantity <= 0) {
+          setFeedbackModal({
+            visible: true,
+            type: "error",
+            message: "No vehicles available for confirmation",
+          });
+          return;
+        }
+      }
+  
+      // Update the booking
+      const { error: updateError } = await supabase         
+        .from('bookings')         
+        .update({           
+          customer_name: updatedBooking.customer_name,           
+          customer_email: updatedBooking.customer_email,           
+          customer_phone: updatedBooking.customer_phone,           
+          rental_start_date: updatedBooking.rental_start_date,           
+          rental_end_date: updatedBooking.rental_end_date,           
+          total_price: updatedBooking.total_price,           
+          pickup_location: updatedBooking.pickup_location,           
+          license_number: updatedBooking.license_number,           
+          vehicle_id: updatedBooking.vehicle_id,           
+          vehicle_variant_id: updatedBooking.vehicle_variant_id,           
+          status: updatedBooking.status,           
+          gov_id_url: updatedBooking.gov_id_url,              
+          updated_at: new Date().toISOString(),                    
+        })         
+        .eq('id', updatedBooking.id);          
+  
+      if (updateError) {         
+        console.error('Booking update error:', updateError);         
+        setFeedbackModal({           
+          visible: true,           
+          type: "error",           
+          message: "Failed to update booking",         
+        });         
+        return;       
+      }
+  
+      // Apply quantity adjustment if needed
+      if (quantityAdjustment !== 0 && variantId) {
+        const { error: quantityError } = await supabase.rpc('adjust_variant_quantity', {
+          variant_id: variantId,
+          change: quantityAdjustment,
+        });
+  
+        if (quantityError) {
+          console.error('Quantity adjustment error:', quantityError);
+          // Rollback the booking update if quantity adjustment fails
+          await supabase
+            .from('bookings')
+            .update({ status: oldStatus })
+            .eq('id', updatedBooking.id);
+  
+          setFeedbackModal({
+            visible: true,
+            type: "error",
+            message: "Failed to update vehicle availability. Booking status reverted.",
+          });
+          return;
+        }
+      }
+  
+      // Refresh data
+      await fetchBookings();       
+      await fetchAvailableVehicles();       
+      closeEditModal();          
+  
+      // Send status update email if status changed
+      if (oldStatus !== newStatus && updatedBooking.customer_email) {
+        try {
+          const emailResult = await EmailService.sendStatusUpdateEmail(updatedBooking, newStatus);
+          if (emailResult.success) {
+            setFeedbackModal({
+              visible: true,
+              type: "success",
+              message: "Booking updated successfully and customer notified via email!",
+            });
+          } else {
+            setFeedbackModal({
+              visible: true,
+              type: "success",
+              message: "Booking updated successfully, but email notification failed.",
+            });
+          }
+        } catch (emailError) {
+          console.error('Email error:', emailError);
+          setFeedbackModal({
+            visible: true,
+            type: "success",
+            message: "Booking updated successfully, but email notification failed.",
+          });
+        }
+      } else {
+        setFeedbackModal({         
+          visible: true,         
+          type: "success",         
+          message: "Booking updated successfully!",       
+        });     
+      }
+    } catch (error) {       
+      console.error('Booking update error:', error);       
+      setFeedbackModal({         
+        visible: true,         
+        type: "error",         
+        message: "Something went wrong while updating booking",       
+      });     
+    }   
   };
+
   
   
 
@@ -568,15 +761,18 @@ const showConfirmation = (title, message, onConfirm) => {
     fetchBookings();
     fetchAvailableVehicles();
   };
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "";
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-PH", {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
+ // utils/date.js or inside your BookingScreen
+ const formatDate = (dateStr) => {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-US", {
+    month: "long",  // September
+    day: "numeric", // 15
+    year: "numeric" // 2025
+  });
+};
+
+  
   
   
   const formatAmount = (amount) => {
@@ -925,7 +1121,7 @@ const showConfirmation = (title, message, onConfirm) => {
 
   
   // Enhanced Calendar Modal Component
-  const CalendarModal = ({ visible, onClose, onDateSelect, selectedDate, title }) => {
+  const CalendarModal = ({ visible, onClose, onDateSelect, selectedDate, title, minDate, maxDate }) => {
     const [calendarAnimation] = useState(new Animated.Value(0));
   
     useEffect(() => {
@@ -946,6 +1142,36 @@ const showConfirmation = (title, message, onConfirm) => {
     }, [visible]);
   
     if (!visible) return null;
+  
+    // Calculate the actual minimum date to use
+    const getMinDate = () => {
+      if (minDate) {
+        return minDate;
+      }
+      // Default to today if no minDate provided
+      return new Date().toISOString().split("T")[0];
+    };
+  
+    // Calculate disabled dates for better UX
+    const getDisabledDates = () => {
+      const disabled = {};
+      const today = new Date();
+      const minDateObj = minDate ? new Date(minDate) : today;
+      
+      // Disable dates before minDate
+      const currentDate = new Date(today.getFullYear(), today.getMonth() - 3, 1); // Start from 3 months ago
+      while (currentDate < minDateObj) {
+        const dateString = currentDate.toISOString().split("T")[0];
+        disabled[dateString] = {
+          disabled: true,
+          disableTouchEvent: true,
+          textColor: '#d1d5db'
+        };
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+  
+      return disabled;
+    };
   
     return (
       <Modal visible={visible} transparent animationType="none">
@@ -978,450 +1204,97 @@ const showConfirmation = (title, message, onConfirm) => {
               </TouchableOpacity>
             </View>
   
+            {/* Date restriction info */}
+            {minDate && (
+              <View style={styles.dateRestrictionInfo}>
+                <Ionicons name="information-circle-outline" size={16} color="#3b82f6" />
+                <Text style={styles.dateRestrictionText}>
+                  Minimum date: {formatDate(minDate)}
+                </Text>
+              </View>
+            )}
+  
             {/* Calendar */}
             <Calendar
+              minDate={getMinDate()}
+              maxDate={maxDate}
               onDayPress={(day) => {
                 onDateSelect(day.dateString);
-                onClose();
               }}
               markedDates={{
+                ...getDisabledDates(),
                 [selectedDate]: {
                   selected: true,
                   selectedColor: "#3b82f6",
                   selectedTextColor: "#ffffff",
                 },
               }}
-              theme={{
-                backgroundColor: "transparent",
-                calendarBackground: "transparent",
-                textSectionTitleColor: "#374151",
-                selectedDayBackgroundColor: "#3b82f6",
-                selectedDayTextColor: "#ffffff",
-                todayTextColor: "#ef4444",
-                dayTextColor: "#111827",
-                textDisabledColor: "#d1d5db",
-                arrowColor: "#3b82f6",
-                disabledArrowColor: "#d1d5db",
-                monthTextColor: "#111827",
-                indicatorColor: "#3b82f6",
-                textDayFontFamily: "System",
-                textMonthFontFamily: "System",
-                textDayHeaderFontFamily: "System",
-                textDayFontWeight: "400",
-                textMonthFontWeight: "600",
-                textDayHeaderFontWeight: "500",
-                textDayFontSize: 16,
-                textMonthFontSize: 18,
-                textDayHeaderFontSize: 13,
-                // Remove any time/GMT related styling
-                'stylesheet.calendar.header': {
-                  week: {
-                    marginTop: 5,
-                    flexDirection: 'row',
-                    justifyContent: 'space-around'
-                  }
-                }
-              }}
-              // Hide any time components
-              hideExtraDays={true}
-              firstDay={1}
-              showWeekNumbers={false}
-              onPressArrowLeft={subtractMonth => subtractMonth()}
-              onPressArrowRight={addMonth => addMonth()}
-            />
-  
-            {/* Footer with current selection */}
-            {selectedDate && (
-              <View style={styles.calendarFooter}>
-                <Text style={styles.selectedDateText}>
-                  Selected: {formatDate(selectedDate)}
+            theme={{
+              backgroundColor: "transparent",
+              calendarBackground: "transparent",
+              textSectionTitleColor: "#374151",
+              selectedDayBackgroundColor: "#3b82f6",
+              selectedDayTextColor: "#ffffff",
+              todayTextColor: "#ef4444",
+              dayTextColor: "#111827",
+              textDisabledColor: "#d1d5db",
+              arrowColor: "#3b82f6",
+              disabledArrowColor: "#d1d5db",
+              monthTextColor: "#111827",
+              indicatorColor: "#3b82f6",
+              textDayFontFamily: "System",
+              textMonthFontFamily: "System",
+              textDayHeaderFontFamily: "System",
+              textDayFontWeight: "400",
+              textMonthFontWeight: "600",
+              textDayHeaderFontWeight: "500",
+              textDayFontSize: 16,
+              textMonthFontSize: 18,
+              textDayHeaderFontSize: 13,
+            }}
+            hideArrows={false}
+            hideExtraDays={true}
+            disableMonthChange={false}
+            firstDay={1}
+            hideDayNames={false}
+            showWeekNumbers={false}
+            disableArrowLeft={false}
+            disableArrowRight={false}
+            disableAllTouchEventsForDisabledDays={true}
+            renderHeader={(date) => {
+              const monthNames = [
+                'January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'
+              ];
+              return (
+                <Text style={{
+                  fontSize: 18,
+                  fontWeight: '600',
+                  color: '#111827',
+                  textAlign: 'center',
+                  marginVertical: 10
+                }}>
+                  {monthNames[date.getMonth()]} {date.getFullYear()}
                 </Text>
-              </View>
-            )}
-          </Animated.View>
-        </TouchableOpacity>
-      </Modal>
-    );
-  };
+              );
+            }}
+          />
+
+          {/* Footer with current selection */}
+          {selectedDate && (
+            <View style={styles.calendarFooter}>
+              <Text style={styles.selectedDateText}>
+                Selected: {formatDate(selectedDate)}
+              </Text>
+            </View>
+          )}
+        </Animated.View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
   // Add Booking Modal Component
   
-  const AddBookingModal = ({ isVisible, onClose, refreshBookings }) => {
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [govIdFile, setGovIdFile] = useState(null);
-    const [cars, setCars] = useState([]);
-    const [variants, setVariants] = useState([]);
-    const [selectedCar, setSelectedCar] = useState(null);
-  
-    const [vehiclePickerVisible, setVehiclePickerVisible] = useState(false);
-    const [datePickerVisible, setDatePickerVisible] = useState(false);
-    const [dateField, setDateField] = useState(null);
-
-    const [confirmVisible, setConfirmVisible] = useState(false);
-  const [deleteVisible, setDeleteVisible] = useState(false);
-    const [formData, setFormData] = useState({
-      customer_name: "",
-      customer_email: "",
-      customer_phone: "",
-      pickup_location: "",
-      license_number: "",
-      rental_start_date: "",
-      rental_end_date: "",
-      vehicle_id: "",
-      vehicle_variant_id: "",
-      total_price: 0,
-      status: "pending",
-    });
-    
-  
-    // Fetch vehicles
-    useEffect(() => {
-      const fetchCars = async () => {
-        const { data, error } = await supabase.from("vehicles").select("*");
-        if (!error) setCars(data);
-      };
-      fetchCars();
-    }, []);
-  
-    // Fetch variants
-    useEffect(() => {
-      const fetchVariants = async () => {
-        const { data, error } = await supabase.from("vehicle_variants").select("*");
-        if (!error) setVariants(data);
-      };
-      fetchVariants();
-    }, []);
-  
-    // Pick Gov ID
-    const pickGovIdFile = async () => {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert("Permission required", "Allow access to photos.");
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.7,
-      });
-      if (!result.canceled) setGovIdFile(result.assets[0]);
-    };
-  
-    // Calculate total price
-    let totalPrice = 0;
-    if (selectedCar && formData.pickupDate && formData.returnDate) {
-      const start = new Date(formData.pickupDate);
-      const end = new Date(formData.returnDate);
-      const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-      if (days > 0) totalPrice = days * Number(selectedCar.price_per_day);
-    }
-  
-    // Submit booking
-    const handleSubmit = async () => {
-      if (!formData.fullName || !formData.email || !formData.phone) {
-        Alert.alert("Validation Error", "Fill out all required fields.");
-        return;
-      }
-      if (!formData.vehicleId) {
-        Alert.alert("Validation Error", "Select a vehicle.");
-        return;
-      }
-      if (!formData.pickupDate || !formData.returnDate) {
-        Alert.alert("Validation Error", "Select rental dates.");
-        return;
-      }
-      if (!govIdFile) {
-        Alert.alert("Validation Error", "Upload Government ID.");
-        return;
-      }
-  
-      setIsSubmitting(true);
-      try {
-        const fileName = `${Date.now()}_${govIdFile.fileName || "govid.jpg"}`;
-        const { error: uploadError } = await supabase.storage
-          .from("gov_ids")
-          .upload(fileName, {
-            uri: govIdFile.uri,
-            type: "image/jpeg",
-            name: fileName,
-          });
-        if (uploadError) throw uploadError;
-  
-        const { data: urlData } = supabase.storage.from("gov_ids").getPublicUrl(fileName);
-        const govIdUrl = urlData?.publicUrl || "";
-  
-        const bookingRow = {
-          vehicle_id: formData.vehicleId,
-          vehicle_variant_id: formData.vehicleVariantId || null,
-          customer_name: formData.fullName,
-          customer_email: formData.email,
-          customer_phone: formData.phone,
-          rental_start_date: formData.pickupDate,
-          rental_end_date: formData.returnDate,
-          pickup_location: formData.pickupLocation,
-          license_number: formData.licenseNumber,
-          total_price: totalPrice,
-          gov_id_url: govIdUrl,
-          status: "pending",
-        };
-  
-        const { error } = await supabase.from("bookings").insert([bookingRow]);
-        if (error) throw error;
-  
-        Alert.alert("Success", "Booking submitted!");
-        refreshBookings?.();
-        onClose();
-      } catch (err) {
-        console.error(err);
-        Alert.alert("Error", "Booking failed.");
-      } finally {
-        setIsSubmitting(false);
-      }
-    };
-  
-    const selectedVehicle = cars.find(v => v.id === formData.vehicleId);
-  
-    return (
-      <Modal visible={isVisible} animationType="none" transparent>
-        <SafeAreaView style={styles.modalContainer}>
-          
-          {/* 🔹 Same HEADER as EditBookingModal */}
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={onClose} style={styles.modalHeaderButton}>
-              <Ionicons name="close" size={24} color="#374151" />
-            </TouchableOpacity>
-  
-            <Text style={styles.modalTitle}>Add Booking</Text>
-  
-            <TouchableOpacity
-              onPress={handleSubmit}
-              style={[styles.modalHeaderButton, styles.saveButtonContainer]}
-              disabled={isSubmitting}
-            >
-              <Text style={styles.saveButton}>
-                {isSubmitting ? "Saving..." : "Save"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {/* 🔹 END HEADER */}
-  
-          {/* FORM */}
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-          <BookingForm
-            booking={formData}
-            setBooking={setFormData}
-            availableVehicles={variants}
-            styles={styles}
-            formatDate={formatDate}
-            setDatePickerVisible={setDatePickerVisible}
-            setDateField={setDateField}
-            setVehiclePickerVisible={setVehiclePickerVisible}
-            isEdit={false} // ✅ hide status selector
-          />
-</ScrollView>
-{datePickerVisible && (
-  <CalendarModal
-    visible={datePickerVisible}
-    onClose={() => setDatePickerVisible(false)}
-    onDateSelect={(dateString) => {
-      if (dateField === "start") {
-        setEditableBooking(prev => ({ ...prev, rental_start_date: dateString }));
-      } else {
-        setEditableBooking(prev => ({ ...prev, rental_end_date: dateString }));
-      }
-    }}
-    selectedDate={dateField === "start" ? editableBooking.rental_start_date : editableBooking.rental_end_date}
-    title={dateField === "start" ? "Select Start Date" : "Select End Date"}
-  />
-)}
-
-
-  
-          {/* Vehicle Picker Modal, Date Picker Modal ... (keep your same logic here) */}
-  
-        </SafeAreaView>
-      </Modal>
-    );
-  };
-  
-
-
-  // Enhanced Edit Booking Modal
-  const EditBookingModal = () => {
-    if (!selectedBooking) return null;
-
-    const [editableBooking, setEditableBooking] = useState({ ...selectedBooking });
-    const [vehiclePickerVisible, setVehiclePickerVisible] = useState(false);
-    const [datePickerVisible, setDatePickerVisible] = useState(false);
-    const [dateField, setDateField] = useState(null);
-
-    const [confirmVisible, setConfirmVisible] = useState(false);
-  const [deleteVisible, setDeleteVisible] = useState(false);
-
-
-    useEffect(() => {
-      if (selectedBooking) {
-        setEditableBooking({ ...selectedBooking });
-      }
-    }, [selectedBooking]);
-
-    // In EditBookingModal (you already have confirmVisible/deleteVisible)
-const handleSave = () => setConfirmVisible(true); // shows custom ActionModal
-const handleConfirmSave = () => {
-  // call updateBooking directly (it already uses supabase)
-  updateBooking(editableBooking);
-  setConfirmVisible(false);
-};
-const handleDelete = () => setDeleteVisible(true);
-const handleConfirmDelete = () => {
-  deleteBooking(editableBooking.id); // runs directly nowupda
-  setDeleteVisible(false); // close ActionModal
-};
-
-
-
-    const selectedVehicle = availableVehicles.find(v => v.vehicle_id === editableBooking.vehicle_id)?.vehicles || editableBooking.vehicles || null;
-
-    // dedupe vehicles so the vehicle picker shows actual vehicles (one entry per vehicle)
-const uniqueVehicles = React.useMemo(() => {
-  const map = {};
-  (availableVehicles || []).forEach(variant => {
-    const vid = variant.vehicle_id;
-    if (!vid) return;
-    // variant.vehicles is the nested vehicles object from the supabase select
-    if (!map[vid]) {
-      map[vid] = {
-        vehicle_id: vid,
-        make: variant.vehicles?.make,
-        model: variant.vehicles?.model,
-        year: variant.vehicles?.year,
-      };
-    }
-  });
-  return Object.values(map);
-}, [availableVehicles]);
-
-    return (
-      <Modal
-        visible={editModalVisible}
-        animationType="none"
-        transparent
-      >
-        <Animated.View style={[
-          styles.modalContainer,
-          {
-            opacity: modalAnimation,
-            transform: [
-              {
-                translateY: modalAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [50, 0],
-                }),
-              },
-            ],
-          },
-        ]}>
-          {/* HEADER with Exit and Save */}
-          <View style={styles.modalHeader}>
-          <TouchableOpacity onPress={closeEditModal} style={styles.modalHeaderButton}>
-            <Ionicons name="close" size={24} color="#374151" />
-          </TouchableOpacity>
-          <Text style={styles.modalTitle}>Edit Booking</Text>
-          <TouchableOpacity
-            onPress={handleSave}
-            style={[styles.modalHeaderButton, styles.saveButtonContainer]}
-          >
-            <Text style={styles.saveButton}>Save</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* FORM */}
-        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-        <BookingForm
-          booking={editableBooking}
-          setBooking={setEditableBooking}
-          availableVehicles={availableVehicles}
-          styles={styles}
-          formatDate={formatDate}
-          setDatePickerVisible={setDatePickerVisible}
-          setDateField={setDateField}
-          setVehiclePickerVisible={setVehiclePickerVisible}
-          isEdit={true} // ✅ show status selector
-        />
-
-
-          {/* Delete Button */}
-          <View style={styles.section}>
-            <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
-              <Ionicons name="trash-outline" size={20} color="#ef4444" />
-              <Text style={styles.deleteButtonText}>Delete Booking</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-        {datePickerVisible && (
-  <Modal transparent>
-    <View style={{ flex: 1, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}>
-    <Calendar
-  onDayPress={(day) => {
-    if (dateField === "start") {
-      setEditableBooking(prev => ({ ...prev, rental_start_date: day.dateString }));
-    } else {
-      setEditableBooking(prev => ({ ...prev, rental_end_date: day.dateString }));
-    }
-    setDatePickerVisible(false);
-  }}
-  markedDates={{
-    [editableBooking.rental_start_date]: {
-      selected: true,
-      selectedColor: "#3b82f6",
-      selectedTextColor: "white",
-    },
-    [editableBooking.rental_end_date]: {
-      selected: true,
-      selectedColor: "#10b981",
-      selectedTextColor: "white",
-    },
-  }}
-  theme={{
-    backgroundColor: "white",
-    calendarBackground: "white",
-    textSectionTitleColor: "#374151",
-    selectedDayBackgroundColor: "#3b82f6",
-    selectedDayTextColor: "#ffffff",
-    todayTextColor: "#ef4444",
-    dayTextColor: "#111827",
-    arrowColor: "#3b82f6",
-    monthTextColor: "#111827",
-    textMonthFontWeight: "bold",
-    textDayFontSize: 16,
-    textMonthFontSize: 18,
-    textDayHeaderFontSize: 14,
-  }}
-/>
-
-    </View>
-  </Modal>
-)}
-
-
-        <ActionModal
-          visible={confirmVisible}
-          type="confirm"
-          onClose={() => setConfirmVisible(false)}
-          onConfirm={handleConfirmSave}
-        />
-      <ActionModal
-        visible={deleteVisible}
-        type="delete"
-        onClose={() => setDeleteVisible(false)}
-        onConfirm={handleConfirmDelete}
-      />
-
-
-
-        </Animated.View>
-      </Modal>
-    );
-  };
 
 
 
@@ -1510,13 +1383,16 @@ const uniqueVehicles = React.useMemo(() => {
     <View>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Bookings</Text>
+
         <View style={styles.headerActions}>
           <TouchableOpacity 
-            style={styles.addButton} 
-            onPress={() => setAddModalVisible(true)}
-          >
-            <Ionicons name="add" size={24} color="white" />
-          </TouchableOpacity>
+          style={styles.addButton} 
+          onPress={openAddModal}
+        >
+          <Ionicons name="add" size={20} color="white" />
+          <Text style={styles.addButtonText}>Add Booking</Text>
+        </TouchableOpacity>
+          
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={28} color="#222" />
           </TouchableOpacity>
@@ -1639,12 +1515,7 @@ const uniqueVehicles = React.useMemo(() => {
       <DateDropdown />
       <VehicleTypeDropdown />
       
-      {/* Modals */}
-      <AddBookingModal
-        isVisible={addModalVisible}
-        onClose={() => setAddModalVisible(false)}
-        refreshBookings={fetchBookings}
-      />
+  
       {actionModalConfig && (
   <ActionModal
     visible={!!actionModalConfig}
@@ -1658,9 +1529,41 @@ const uniqueVehicles = React.useMemo(() => {
     }}
   />
 )}
+<ActionModal
+  visible={feedbackModal.visible}
+  type={feedbackModal.type}
+  title={feedbackModal.type === "success" ? "Success" : "Error"}
+  message={feedbackModal.message}
+  confirmText="OK"
+  onClose={() => setFeedbackModal({ visible: false, type: "success", message: "" })}
+  onConfirm={() => setFeedbackModal({ visible: false, type: "success", message: "" })}
+/>
 
 
-      <EditBookingModal />
+
+      <EditBookingModal
+      visible={editModalVisible}
+      booking={selectedBooking}
+      availableVehicles={availableVehicles}
+      closeEditModal={closeEditModal}
+      updateBooking={updateBooking}
+      deleteBooking={deleteBooking}
+      modalAnimation={modalAnimation}
+      styles={styles}
+      formatDate={formatDate}
+      CalendarModalComponent={CalendarModal}
+    />
+    <AddBookingModal
+      visible={addBookingModalVisible}
+      availableVehicles={availableVehicles}
+      closeModal={closeAddModal}
+      onBookingAdded={handleBookingAdded}
+      modalAnimation={addModalAnimation}
+      styles={styles}
+      formatDate={formatDate}
+      CalendarModalComponent={CalendarModal}
+    />
+        
 
       {/* Main Content */}
       <FlatList
@@ -1759,21 +1662,21 @@ const enhancedCalendarStyles = StyleSheet.create({
   
   // Enhanced date input styling
   dateInput: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#f9fafb',
-    borderWidth: 1.5,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    minHeight: 50,
+    flexDirection: "row",   // place text + icon horizontally
+    justifyContent: "space-between", // push them apart
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#d1d5db", // gray-300
+    borderRadius: 8,
+    backgroundColor: "white",
   },
+  
   dateInputText: {
-    fontSize: 16,
-    color: '#1f2937',
-    fontWeight: '500',
+    fontSize: 14,
+    color: "#111827", // gray-900
+    flexShrink: 1, // allows wrapping if text is long
   },
   placeholderText: {
     color: '#9ca3af',
@@ -1833,13 +1736,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   addButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: 'black',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  addButtonText:{
+    color: "white"
   },
   logoutButton: {
     padding: 8,
@@ -2266,7 +2172,7 @@ const styles = StyleSheet.create({
     color: '#1f2937',
   },
   saveButtonContainer: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: 'black',
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
@@ -2472,4 +2378,4 @@ const styles = StyleSheet.create({
     padding: 20,
     fontSize: 16,
   },
-});
+}); 

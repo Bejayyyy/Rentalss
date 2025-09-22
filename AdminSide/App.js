@@ -38,6 +38,8 @@ const linking = {
 
 
 
+
+
 function VehiclesStack() {
   return (
     <Stack.Navigator
@@ -218,7 +220,7 @@ useEffect(() => {
   return () => subscription.remove();
 }, []);
 
-
+  
   
     
 

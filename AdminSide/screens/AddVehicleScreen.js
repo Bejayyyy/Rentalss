@@ -19,8 +19,9 @@ import * as ImagePicker from "expo-image-picker"
 import { supabase } from "../services/supabase"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { decode } from 'base64-arraybuffer'
-import * as FileSystem from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 import ActionModal from "../components/AlertModal/ActionModal"
+import * as ImageManipulator from 'expo-image-manipulator'
 
 const { width } = Dimensions.get("window")
 const isWeb = Platform.OS === "web"
@@ -41,6 +42,19 @@ export default function AddVehicleScreen({ navigation, route }) {
     available: editingVehicle?.available ?? true,
   })
 
+  const [feedbackModal, setFeedbackModal] = useState({
+    visible: false,
+    type: "success", 
+    message: ""
+  })
+  const handleFeedbackModalClose = () => {
+    setFeedbackModal({ visible: false, type: "success", message: "" })
+    
+    // Navigate back only on success
+    if (feedbackModal.type === "success") {
+      navigation.goBack()
+    }
+  }
   // Color variants state
   const [colorVariants, setColorVariants] = useState([
     {
@@ -141,7 +155,7 @@ export default function AddVehicleScreen({ navigation, route }) {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, 
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.8,
@@ -152,53 +166,69 @@ export default function AddVehicleScreen({ navigation, route }) {
     }
   }
 
-  const uploadImage = async (uri) => {
-    if (!uri) return null
+// Fixed uploadImage function - replace your existing one with this
+const uploadImage = async (uri) => {
+  if (!uri) return null;
 
-    const fileExt = uri.split(".").pop()?.toLowerCase() || "jpg"
-    const safeExt = fileExt === "heic" ? "jpg" : fileExt
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${safeExt}`
-    const filePath = `vehicle-variants/${fileName}`
-    let contentType = `image/${safeExt === "jpg" ? "jpeg" : safeExt}`
+  try {
+    let processedUri = uri;
 
-    try {
-      if (isWeb) {
-        const response = await fetch(uri)
-        if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`)
-        const blob = await response.blob()
-        if (blob.type) contentType = blob.type
-
-        const file = new File([blob], fileName, { type: contentType })
-
-        const { error } = await supabase.storage
-          .from("vehicle-images")
-          .upload(filePath, file, { contentType, upsert: false })
-
-        if (error) throw error
-      } else {
-        const base64String = await FileSystem.readAsStringAsync(uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        })
-
-        const arrayBuffer = decode(base64String)
-
-        const { error } = await supabase.storage
-          .from("vehicle-images")
-          .upload(filePath, arrayBuffer, { contentType, upsert: false })
-
-        if (error) throw error
-      }
-
-      const { data: publicData } = supabase.storage
-        .from("vehicle-images")
-        .getPublicUrl(filePath)
-
-      return publicData.publicUrl
-    } catch (err) {
-      console.error("Upload error:", err)
-      throw err
+    // Convert HEIC → JPEG on iOS if needed
+    if (uri.toLowerCase().endsWith(".heic")) {
+      const manipResult = await ImageManipulator.manipulateAsync(
+        uri,
+        [],
+        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      processedUri = manipResult.uri;
     }
+
+    const fileExt = processedUri.split(".").pop()?.toLowerCase() || "jpg";
+    const safeExt = fileExt === "heic" ? "jpg" : fileExt;
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${safeExt}`;
+    const filePath = `vehicle-variants/${fileName}`;
+    const contentType = `image/${safeExt === "jpg" ? "jpeg" : safeExt}`;
+
+    let fileData;
+
+    if (Platform.OS === "web") {
+      // Web: fetch blob directly
+      const response = await fetch(processedUri);
+      if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
+      fileData = await response.blob();
+
+      const { error } = await supabase.storage
+        .from("vehicle-images")
+        .upload(filePath, fileData, { contentType, upsert: false });
+
+      if (error) throw error;
+    } else {
+      // Native: read as base64 string, then convert to ArrayBuffer
+      const base64Data = await FileSystem.readAsStringAsync(processedUri, {
+        encoding: "base64", // Use string instead of FileSystem.EncodingType.Base64
+      });
+
+      const { error } = await supabase.storage
+        .from("vehicle-images")
+        .upload(filePath, decode(base64Data), {
+          contentType,
+          upsert: false,
+        });
+
+      if (error) throw error;
+    }
+
+    // Return public URL
+    const { data: publicData } = supabase.storage
+      .from("vehicle-images")
+      .getPublicUrl(filePath);
+
+    return publicData.publicUrl;
+  } catch (err) {
+    console.error("Upload error:", err);
+    throw err;
   }
+};
 
   const validateForm = () => {
     if (!formData.make || !formData.model || !formData.year || !formData.pricePerDay || !formData.seats) {
@@ -241,16 +271,16 @@ export default function AddVehicleScreen({ navigation, route }) {
   const handleSubmit = async () => {
     setShowConfirmModal(false)
     setLoading(true)
-
+  
     try {
       // Get valid variants
       const validVariants = colorVariants.filter(variant => variant.color.trim() !== "")
-
+  
       // Upload images for variants
       const variantsWithImages = await Promise.all(
         validVariants.map(async (variant) => {
           let imageUrl = variant.imageUrl
-
+  
           if (variant.imageUri && variant.imageUri !== variant.imageUrl) {
             try {
               imageUrl = await uploadImage(variant.imageUri)
@@ -259,20 +289,20 @@ export default function AddVehicleScreen({ navigation, route }) {
               // Continue without image for this variant
             }
           }
-
+  
           return {
             ...variant,
             imageUrl
           }
         })
       )
-
+  
       // Calculate total quantities across all variants
       const totalQuantity = variantsWithImages.reduce((sum, variant) => 
         sum + Number.parseInt(variant.totalQuantity), 0)
       const availableQuantity = variantsWithImages.reduce((sum, variant) => 
         sum + Number.parseInt(variant.availableQuantity), 0)
-
+  
       const vehicleData = {
         make: formData.make,
         model: formData.model,
@@ -288,21 +318,21 @@ export default function AddVehicleScreen({ navigation, route }) {
         image_url: variantsWithImages[0]?.imageUrl || null, // Use first variant's image as main image
         updated_at: new Date().toISOString(),
       }
-
+  
       let vehicleId = editingVehicle?.id
-
+  
       if (isEditing) {
         // Update existing vehicle
         const { error } = await supabase
           .from('vehicles')
           .update(vehicleData)
           .eq('id', editingVehicle.id)
-
+  
         if (error) {
           console.error('Update error:', error)
           throw error
         }
-
+  
         // Delete existing variants
         await supabase
           .from('vehicle_variants')
@@ -317,15 +347,15 @@ export default function AddVehicleScreen({ navigation, route }) {
           .insert([vehicleData])
           .select()
           .single()
-
+  
         if (error) {
           console.error('Insert error:', error)
           throw error
         }
-
+  
         vehicleId = newVehicle.id
       }
-
+  
       // Insert variants
       const variantInserts = variantsWithImages.map(variant => ({
         vehicle_id: vehicleId,
@@ -336,25 +366,37 @@ export default function AddVehicleScreen({ navigation, route }) {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }))
-
+  
       const { error: variantError } = await supabase
         .from('vehicle_variants')
         .insert(variantInserts)
-
+  
       if (variantError) {
         console.error('Variant insert error:', variantError)
         throw variantError
       }
-
-      Alert.alert("Success", isEditing ? "Vehicle updated successfully" : "Vehicle added successfully")
-      navigation.goBack()
+  
+      // Show success modal instead of Alert
+      setFeedbackModal({
+        visible: true,
+        type: "success",
+        message: isEditing ? "Vehicle updated successfully! All changes have been saved." : "Vehicle added successfully! Your new vehicle is now available in the fleet."
+      })
+  
     } catch (error) {
       console.error("Error saving vehicle:", error)
-      Alert.alert("Error", `Failed to save vehicle: ${error.message}`)
+      
+      // Show error modal instead of Alert
+      setFeedbackModal({
+        visible: true,
+        type: "error",
+        message: `Failed to ${isEditing ? 'update' : 'save'} vehicle: ${error.message}`
+      })
     } finally {
       setLoading(false)
     }
   }
+  
 
   const renderTypeSelector = () => (
     <View style={styles.typeSelector}>
@@ -454,6 +496,16 @@ export default function AddVehicleScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* Feedback Modal */}
+    <ActionModal
+      visible={feedbackModal.visible}
+      type={feedbackModal.type}
+      title={feedbackModal.type === "success" ? "Success" : "Error"}
+      message={feedbackModal.message}
+      confirmText="OK"
+      onClose={handleFeedbackModalClose}
+      onConfirm={handleFeedbackModalClose}
+    />
       <ScrollView
         style={styles.container}
         contentContainerStyle={[

@@ -15,6 +15,7 @@ import supportIcon from "./assets/iconssupport.png"
 import BackgroundImage from "./assets/HeroPage/section_bg2.png"
 import bgContact from "./assets/ContactUs.jpg"
 import defaultBackground from "./assets/CarScreen/background.jpg";
+import RentalBot from "../Chatbot/Rentalbot"
 
 
 /* ===========================
@@ -342,7 +343,7 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
       e.preventDefault();
       if (isSubmitting) return;
       setIsSubmitting(true);
-  
+    
       try {
         if (!formData.vehicleVariantId) {
           showToast("error", "Please select a color variant.");
@@ -359,7 +360,7 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
           setIsSubmitting(false);
           return;
         }
-  
+    
         const start = new Date(formData.pickupDate);
         const end = new Date(formData.returnDate);
         if (!(formData.pickupDate && formData.returnDate) || end <= start) {
@@ -367,13 +368,14 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
           setIsSubmitting(false);
           return;
         }
-  
+    
+        // Upload Government ID
         const fileName = `${Date.now()}_${govIdFile.name}`;
         const { error: uploadError } = await supabase.storage.from("gov_ids").upload(fileName, govIdFile);
         if (uploadError) throw uploadError;
         const { data: urlData } = supabase.storage.from("gov_ids").getPublicUrl(fileName);
         const govIdUrl = urlData?.publicUrl || "";
-  
+    
         const bookingRow = {
           vehicle_id: selectedCar.id,
           vehicle_variant_id: formData.vehicleVariantId,
@@ -388,14 +390,57 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
           gov_id_url: govIdUrl,
           status: "pending",
         };
-  
-        const { error: insertError } = await supabase.from("bookings").insert([bookingRow]);
+    
+        // Insert booking into database
+        const { data: insertedBooking, error: insertError } = await supabase
+          .from("bookings")
+          .insert([bookingRow])
+          .select()
+          .single();
+        
         if (insertError) throw insertError;
-  
-        showToast("success", "Booking submitted successfully!");
+    
+        // Send confirmation email
+        try {
+          const emailData = {
+            customer_email: formData.email,
+            customer_name: formData.fullName,
+            bookingId: insertedBooking.id,
+            vehicleMake: selectedCar.make,
+            vehicleModel: selectedCar.model,
+            vehicleYear: selectedCar.year,
+            variantColor: selectedVariant?.color,
+            rental_start_date: formData.pickupDate,
+            rental_end_date: formData.returnDate,
+            pickup_location: formData.pickupLocation,
+            total_price: totalPrice
+          };
+    
+          const emailResponse = await fetch('http://localhost:3001/api/send-booking-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(emailData)
+          });
+    
+          const emailResult = await emailResponse.json();
+          
+          if (emailResult.success) {
+            showToast("success", "Booking submitted and confirmation email sent!");
+          } else {
+            showToast("success", "Booking submitted! (Email notification may be delayed)");
+            console.warn("Email sending failed:", emailResult.error);
+          }
+        } catch (emailError) {
+          console.error("Email service error:", emailError);
+          showToast("success", "Booking submitted! (Email notification may be delayed)");
+        }
+    
         await refreshBookings?.();
         await refreshVariants();
         setTimeout(() => onClose(), 1200);
+        
       } catch (err) {
         console.error(err);
         showToast("error", "Booking failed. Please try again.");
@@ -500,7 +545,7 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
           <div className="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100  rounded-2xl max-w-7xl w-full max-h-[95vh] overflow-y-auto shadow-2xl">
             <div className="flex flex-col lg:flex-row min-h-[700px]">
             <div className="lg:w-2/5 bg-white p-5 flex flex-col">
-            <div className="flex items-center justify-center mt-20">
+            <div className="flex items-center justify-center mt-23">
                 <div className="w-full h-80 lg:h-96 rounded-3xl shadow-lg flex items-center justify-center overflow-hidden border border-gray-100 relative">
                   {/* Default background image */}
                   <img
@@ -514,14 +559,14 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
                     <img
                       src={selectedVariant?.image_url || displayCar?.image_url}
                       alt={`${displayCar?.make} ${displayCar?.model}`}
-                      className="relative object-contain w-full h-full p-6 mt-20"
+                      className="relative object-contain w-full h-full p-6 mt-25"
                     />
                   ) : null}
                 </div>
 
                 </div>
  {/* Selected Color Title */}
-<div className="text-center mt-5 lg:text-left mb-2">
+<div className="text-center mt-5 ml-1 lg:text-left mb-2">
   <span className="text-sm text-gray-700 font-medium">Color:</span>{" "}
   <span className="font-semibold text-gray-900">
     {selectedVariant?.color || "Unavailable"}
@@ -529,7 +574,7 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
 </div>
 
 {/* Color Selection */}
-<div className="flex gap-3 justify-center lg:justify-start">
+<div className="flex gap-3 justify-center ml-1 lg:justify-start">
   {variants.map((variant) => {
     const colorName = variant.color?.toLowerCase() || "";
     let bgColor = "#e5e7eb";
@@ -554,7 +599,7 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
         <button
           onClick={() => !isUnavailable && handleVariantSelect(variant)}
           disabled={isUnavailable}
-          className={`w-5 h-5 rounded-full border-2 border-black-100 
+          className={`w-5 h-5 rounded-full border-2 border-gray
             ${isSelected ? "ring-1 ring-white" : ""}
             ${isUnavailable ? "opacity-20 cursor-not-allowed" : "cursor-pointer"}
           `}
@@ -574,7 +619,7 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
 
 
 {/* Car Details */}
-<div className="mt-4 text-center lg:text-left text-black">
+<div className="mt-4 text-center lg:text-left ml-1 text-black">
   <h3 className="text-3xl font-bold mb-3">
     {displayCar?.make} {displayCar?.model}
   </h3>
@@ -608,7 +653,7 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
 
   <form onSubmit={handleSubmit} className="space-y-8">
     {/* Personal Information */}
-    <div className="bg-white rounded-2xl p-6 border border-gray-200">
+    <div className="bg-white rounded-2xl  p-6 border border-gray-200">
       <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
         <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
           <User className="w-5 h-5 text-black" />
@@ -887,7 +932,7 @@ const Navbar = ({ onRentClick, scrollToSection, refs }) => {
               </button>
               <button
                 onClick={onRentClick}
-                className="w-full bg-black text-white px-6 py-3 rounded-full font-medium hover:bg-gray-800 transition-transform transform hover:scale-105"
+                className="w-full bg-black text-white px-6 py-3  font-medium hover:bg-gray-800 transition-transform transform hover:scale-105"
               >
                 Rent Now
               </button>
@@ -1185,7 +1230,7 @@ const CarCard = ({ car, onRentClick, onOpenDetails }) => {
         <img
           src={defaultBackground}
           alt="Default background"
-          className="absolute inset-0 w-full h-full   object-cover"
+          className="absolute inset-0 w-full h-full rounded-xl  object-cover"
         />
         
         {/* Car image on top of background */}
@@ -1307,10 +1352,41 @@ const CarCard = ({ car, onRentClick, onOpenDetails }) => {
 /* ===========================
    Fleet Section
    =========================== */
-   const FleetSection = ({ onRentClick, onOpenDetails }) => {
+ 
+const FleetSection = ({ onRentClick, onOpenDetails }) => {
+  const [categories, setCategories] = useState(["All"]) // Start with just "All"
   const [vehicles, setVehicles] = useState([])
+  const [filteredVehicles, setFilteredVehicles] = useState([])
+  const [activeCategory, setActiveCategory] = useState("All")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("vehicles")
+        .select("type")
+        .not("type", "is", null) // Exclude null types
+      
+      if (error) throw error
+      
+      // Extract unique types and add "All" at the beginning
+      const uniqueTypes = [...new Set(data.map(vehicle => vehicle.type))]
+      setCategories(["All", ...uniqueTypes])
+    } catch (err) {
+      console.error("Error fetching categories:", err)
+      // Fallback to default categories if fetch fails
+      setCategories(["All", "Sedan", "SUV", "Luxury"])
+    }
+  }
+  useEffect(() => {
+    const fetchData = async () => {
+      await fetchCategories() // Add this line
+      fetchVehicles() // Your existing function
+    }
+    fetchData()
+  }, [])
+
   useEffect(() => {
     const fetchVehicles = async () => {
       try {
@@ -1323,20 +1399,23 @@ const CarCard = ({ car, onRentClick, onOpenDetails }) => {
           `)
           .order("created_at", { ascending: false })
         if (error) throw error
-  
-        // 🆕 compute availability based on variants
-        const enriched = (data || []).map(v => {
+
+        const enriched = (data || []).map((v) => {
           const variants = v.vehicle_variants || []
-          const totalAvailable = variants.reduce((sum, vv) => sum + (vv.available_quantity || 0), 0)
+          const totalAvailable = variants.reduce(
+            (sum, vv) => sum + (vv.available_quantity || 0),
+            0
+          )
           return {
             ...v,
             available: totalAvailable > 0,
             available_quantity: totalAvailable,
-            total_quantity: variants.length
+            total_quantity: variants.length,
           }
         })
-  
+
         setVehicles(enriched)
+        setFilteredVehicles(enriched)
       } catch (err) {
         setError(err.message)
       } finally {
@@ -1345,17 +1424,80 @@ const CarCard = ({ car, onRentClick, onOpenDetails }) => {
     }
     fetchVehicles()
   }, [])
-  
+
+  const handleCategoryClick = (category) => {
+    setActiveCategory(category)
+    setMenuOpen(false) // close menu after selecting
+    if (category === "All") {
+      setFilteredVehicles(vehicles)
+    } else {
+      setFilteredVehicles(vehicles.filter((v) => v.type === category))
+    }
+  }
 
   return (
     <section className="py-20 bg-[#F0F5F8]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">Explore Our Fleet</h2>
+          <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
+            Explore Our Fleet
+          </h2>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            Find the perfect car for your needs with our special rental offers. We provide a wide selection of vehicles,
-            easy booking, and exceptional value for your next journey.
+            Find the perfect car for your needs with our special rental offers.
+            We provide a wide selection of vehicles, easy booking, and
+            exceptional value for your next journey.
           </p>
+        </div>
+
+        {/* 🆕 Category Tabs */}
+        <div className="mb-12">
+          {/* Desktop Tabs */}
+          <div className="hidden md:flex justify-center gap-8">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => handleCategoryClick(cat)}
+                className={`pb-2 font-semibold text-lg relative ${
+                  activeCategory === cat ? "text-black" : "text-gray-500"
+                }`}
+              >
+                {cat}
+                {activeCategory === cat && (
+                  <span className="absolute left-0 bottom-0 w-full h-[2px] bg-black rounded"></span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Mobile Burger */}
+          <div className="md:hidden flex ">
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="flex items-center gap-2 bg-white shadow px-4 py-2 rounded-lg"
+            >
+              {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              <span className="font-semibold">{activeCategory}</span>
+            </button>
+          </div>
+
+          {/* Mobile Dropdown */}
+          {menuOpen && (
+            <div className="md:hidden mt-4 bg-white shadow-lg rounded-lg p-4 space-y-2 text-center">
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => handleCategoryClick(cat)}
+                  className={`block w-full py-2 font-semibold rounded ${
+                    activeCategory === cat
+                      ? "bg-black text-white"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {loading ? (
@@ -1364,23 +1506,26 @@ const CarCard = ({ car, onRentClick, onOpenDetails }) => {
           </div>
         ) : error ? (
           <div className="flex justify-center items-center py-20">
-            <div className="text-lg text-red-600">Error loading vehicles: {error}</div>
+            <div className="text-lg text-red-600">
+              Error loading vehicles: {error}
+            </div>
           </div>
-        ) : vehicles.length === 0 ? (
+        ) : filteredVehicles.length === 0 ? (
           <div className="flex justify-center items-center py-20">
-            <div className="text-lg text-gray-600">No vehicles available at the moment.</div>
+            <div className="text-lg text-gray-600">
+              No vehicles available in this category.
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 place-items-center">
-           {vehicles.map((vehicle) => (
-            <CarCard
-              key={vehicle.id}
-              car={vehicle}
-              onRentClick={onRentClick}
-              onOpenDetails={onOpenDetails}
-            />
-          ))}
-
+            {filteredVehicles.map((vehicle) => (
+              <CarCard
+                key={vehicle.id}
+                car={vehicle}
+                onRentClick={onRentClick}
+                onOpenDetails={onOpenDetails}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -1391,63 +1536,65 @@ const CarCard = ({ car, onRentClick, onOpenDetails }) => {
 /* ===========================
    FAQs
    =========================== */
-const FAQs = () => {
-  const [openIndex, setOpenIndex] = useState(null)
-  const faqs = [
-    {
-      question: "What do I need to rent a car?",
-      answer:
-        "You’ll need a valid driver’s license, a government-issued ID, and a credit or debit card for the security deposit.",
-    },
-    {
-      question: "Can I extend my booking?",
-      answer:
-        "Yes, as long as the car is available. Simply reach out to us before your rental period ends to extend your booking.",
-    },
-    {
-      question: "Is insurance included?",
-      answer:
-        "All rentals include basic insurance coverage. You can also upgrade to full coverage for extra peace of mind.",
-    },
-    {
-      question: "Do you offer delivery or pickup services?",
-      answer:
-        "Yes! We can deliver the car to your preferred location or arrange pickup at one of our designated points.",
-    },
-  ]
-
-  const toggleFAQ = (i) => setOpenIndex(openIndex === i ? null : i)
-
-  return (
-    <section className="bg-[#101010] text-white py-20 px-6 md:px-10 lg:px-20">
-      <div className="max-w-5xl mx-auto">
-        <div className="text-center mb-12">
-          <h2 className="text-4xl lg:text-5xl font-bold mb-4">FAQs</h2>
-          <p className="text-gray-300 text-lg">
-            Have a question? We’ve got you covered. Here are some of our most frequently asked questions.
-          </p>
-        </div>
-
-        <div className="space-y-6">
-          {faqs.map((faq, i) => (
-            <div
-              key={i}
-              className="bg-[#1A1A1A] rounded-2xl p-6 shadow-md cursor-pointer transition hover:bg-[#222222]"
-              onClick={() => toggleFAQ(i)}
-            >
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold">{faq.question}</h3>
-                {openIndex === i ? <ChevronUp className="w-6 h-6 text-gray-400" /> : <ChevronDown className="w-6 h-6 text-gray-400" />}
+   const FAQs = () => {
+    const [openIndex, setOpenIndex] = useState(null)
+  
+    const faqs = [
+      {
+        question: "What do I need to rent a car?",
+        answer:
+          "You’ll need a valid driver’s license, a government-issued ID, and a credit or debit card for the security deposit.",
+      },
+      {
+        question: "Can I extend my booking?",
+        answer:
+          "Yes, as long as the car is available. Simply reach out to us before your rental period ends to extend your booking.",
+      },
+      {
+        question: "Is insurance included?",
+        answer:
+          "All rentals include basic insurance coverage. You can also upgrade to full coverage for extra peace of mind.",
+      },
+      {
+        question: "Do you offer delivery or pickup services?",
+        answer:
+          "Yes! We can deliver the car to your preferred location or arrange pickup at one of our designated points.",
+      },
+    ]
+  
+    const toggleFAQ = (i) => setOpenIndex(openIndex === i ? null : i)
+  
+    return (
+      <section className="bg-[#101010] text-white py-20 px-6 md:px-10 lg:px-20">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl lg:text-5xl font-bold mb-4">FAQs</h2>
+            <p className="text-white text-lg">
+              Have a question? We’ve got you covered. Here are some of our most frequently asked questions.
+            </p>
+          </div>
+  
+          <div className="space-y-6 divide-y divide-gray-700">
+            {faqs.map((faq, i) => (
+              <div key={i} className="py-4 cursor-pointer" onClick={() => toggleFAQ(i)}>
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-semibold">{faq.question}</h3>
+                  {openIndex === i ? (
+                    <ChevronUp className="w-6 h-6 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="w-6 h-6 text-gray-400" />
+                  )}
+                </div>
+                {openIndex === i && (
+                  <p className="text-gray-300 mt-3 leading-relaxed">{faq.answer}</p>
+                )}
               </div>
-              {openIndex === i && <p className="text-gray-400 mt-4 leading-relaxed">{faq.answer}</p>}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
-    </section>
-  )
-}
-
+      </section>
+    )
+  }
 const ContactUs = () => {
   return (
     <section
@@ -1496,7 +1643,7 @@ const ContactUs = () => {
             title="Rental Den Location"
             src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d62808.5234949729!2d123.8665!3d10.3157!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x33a9991b55555555%3A0xaaaaaaaaaaaaaaa!2sCebu%20City!5e0!3m2!1sen!2sph!4v1694700000000!5m2!1sen!2sph"
             width="100%"
-            height="400"
+            height="320"
             style={{ border: 0 }}
             allowFullScreen=""
             loading="lazy"
@@ -1558,6 +1705,7 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-[#F0F5F8] flex flex-col">
+     
       <Navbar onRentClick={() => handleRentClick()} scrollToSection={scrollToSection} refs={{ heroRef, whyChooseUsRef, aboutRef, fleetRef, faqRef, contactRef }} />
 
       <div ref={heroRef}><HeroSection /></div>
@@ -1578,6 +1726,8 @@ const App = () => {
         car={selectedCar}
         onRentClick={handleRentClick} // 👈 rent from inside details
       />
+      <RentalBot/>
+
 
 
       
@@ -1601,7 +1751,10 @@ const App = () => {
         }
         .animate-slide-in { animation: slide-in 0.3s ease-out; }
       `}</style>
+      
+
     </div>
+    
   )
 }
 

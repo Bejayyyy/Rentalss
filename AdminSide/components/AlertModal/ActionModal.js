@@ -1,10 +1,10 @@
-import React from "react"
+import React, { useEffect } from "react"
 import { View, Text, TouchableOpacity, Modal, StyleSheet } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 
 export default function ActionModal({
   visible,
-  type = "confirm", // "confirm" | "delete"
+  type = "confirm", // "confirm" | "delete" | "success"
   title,
   message,
   confirmText,
@@ -29,9 +29,27 @@ export default function ActionModal({
       icon: <Ionicons name="trash" size={32} color="#ef4444" />,
       confirmColor: "#ef4444",
     },
+    success: {
+      title: "Success",
+      message: "Your action was completed successfully!",
+      confirmText: "OK",
+      icon: <Ionicons name="checkmark-circle" size={32} color="#10b981" />,
+      confirmColor: "#10b981",
+    },
   }
 
   const config = defaults[type]
+
+  // Auto-close for success modal
+  useEffect(() => {
+    if (visible && type === "success") {
+      const timer = setTimeout(() => {
+        onClose()
+      }, 1500) // auto-close after 1.5s
+
+      return () => clearTimeout(timer)
+    }
+  }, [visible, type, onClose])
 
   return (
     <Modal
@@ -48,36 +66,43 @@ export default function ActionModal({
             <Text style={styles.modalMessage}>{message || config.message}</Text>
           </View>
 
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={styles.modalCancelButton}
-              onPress={onClose}
-              disabled={loading}
-            >
-              <Text style={styles.modalCancelText}>{cancelText}</Text>
-            </TouchableOpacity>
+          {/* Show buttons only if NOT success */}
+          {type !== "success" && (
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={onClose}
+                disabled={loading}
+              >
+                <Text style={styles.modalCancelText}>{cancelText}</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[
-                styles.modalConfirmButton,
-                { backgroundColor: config.confirmColor },
-                loading && styles.modalButtonDisabled,
-              ]}
-              onPress={onConfirm}
-              disabled={loading}
-            >
-              {loading ? (
-                <Text style={styles.modalConfirmText}>Please wait...</Text>
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={16} color="white" />
-                  <Text style={styles.modalConfirmText}>
-                    {confirmText || config.confirmText}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                style={[
+                  styles.modalConfirmButton,
+                  { backgroundColor: config.confirmColor },
+                  loading && styles.modalButtonDisabled,
+                ]}
+                onPress={onConfirm}
+                disabled={loading}
+              >
+                {loading ? (
+                  <Text style={styles.modalConfirmText}>Please wait...</Text>
+                ) : (
+                  <>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={16}
+                      color="white"
+                    />
+                    <Text style={styles.modalConfirmText}>
+                      {confirmText || config.confirmText}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
     </Modal>
