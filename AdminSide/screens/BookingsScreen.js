@@ -594,6 +594,16 @@ const showConfirmation = (title, message, onConfirm) => {
         return;       
       }
   
+      // Validate decline reason if status is declined
+      if (updatedBooking.status === 'declined' && !updatedBooking.decline_reason?.trim()) {
+        setFeedbackModal({
+          visible: true,
+          type: "error",
+          message: "Please provide a reason for declining this booking.",
+        });
+        return;
+      }
+  
       // Handle quantity adjustments based on status changes
       const oldStatus = existingBooking.status;
       const newStatus = updatedBooking.status;
@@ -601,7 +611,7 @@ const showConfirmation = (title, message, onConfirm) => {
   
       // Define status changes that affect vehicle availability
       const reservingStatuses = ['confirmed']; // Statuses that reserve a vehicle
-      const releasingStatuses = ['completed', 'cancelled']; // Statuses that release a vehicle
+      const releasingStatuses = ['completed', 'cancelled', 'declined']; // Statuses that release a vehicle
       
       let quantityAdjustment = 0;
       
@@ -616,7 +626,7 @@ const showConfirmation = (title, message, onConfirm) => {
           // Moving from non-reserving to reserving status (e.g., pending -> confirmed)
           quantityAdjustment = -1; // Decrease available quantity
         } else if (wasReserving && isReleasing) {
-          // Moving from reserving to releasing status (e.g., confirmed -> completed/cancelled)
+          // Moving from reserving to releasing status (e.g., confirmed -> completed/cancelled/declined)
           quantityAdjustment = +1; // Increase available quantity
         } else if (wasReserving && !isReserving && !isReleasing) {
           // Moving from reserving to non-reserving, non-releasing status (e.g., confirmed -> pending)
@@ -667,7 +677,8 @@ const showConfirmation = (title, message, onConfirm) => {
           vehicle_id: updatedBooking.vehicle_id,           
           vehicle_variant_id: updatedBooking.vehicle_variant_id,           
           status: updatedBooking.status,           
-          gov_id_url: updatedBooking.gov_id_url,              
+          gov_id_url: updatedBooking.gov_id_url,
+          decline_reason: updatedBooking.decline_reason || null,              
           updated_at: new Date().toISOString(),                    
         })         
         .eq('id', updatedBooking.id);          
@@ -714,7 +725,20 @@ const showConfirmation = (title, message, onConfirm) => {
       // Send status update email if status changed
       if (oldStatus !== newStatus && updatedBooking.customer_email) {
         try {
-          const emailResult = await EmailService.sendStatusUpdateEmail(updatedBooking, newStatus);
+          // Prepare email data with decline reason if applicable
+          const emailData = {
+            ...updatedBooking,
+            newStatus: newStatus,
+            bookingId: updatedBooking.id,
+            vehicleMake: updatedBooking.vehicles?.make || 'N/A',
+            vehicleModel: updatedBooking.vehicles?.model || 'N/A', 
+            vehicleYear: updatedBooking.vehicles?.year || 'N/A',
+            variantColor: updatedBooking.vehicle_variants?.color || null,
+            updated_date: new Date().toISOString(),
+            decline_reason: updatedBooking.status === 'declined' ? updatedBooking.decline_reason : null
+          };
+  
+          const emailResult = await EmailService.sendStatusUpdateEmail(emailData, newStatus);
           if (emailResult.success) {
             setFeedbackModal({
               visible: true,
@@ -798,6 +822,8 @@ const showConfirmation = (title, message, onConfirm) => {
         return '#3b82f6';
       case 'cancelled':
         return '#ef4444';
+      case 'declined':
+      return '#dc2626'; // Darker red for declined
       default:
         return '#6b7280';
     }
@@ -1005,7 +1031,7 @@ const showConfirmation = (title, message, onConfirm) => {
   };
 
   const StatusDropdown = () => {
-    const statusOptions = ['All', 'pending', 'confirmed', 'completed', 'cancelled'];
+    const statusOptions = ['All', 'pending', 'confirmed', 'completed', 'cancelled', 'declined'];
     
     return (
       <EnhancedDropdown 

@@ -338,7 +338,7 @@ const uploadImage = async (uri) => {
           .from('vehicle_variants')
           .delete()
           .eq('vehicle_id', editingVehicle.id)
-      } else {
+      } else { 
         // Create new vehicle
         vehicleData.created_at = new Date().toISOString()
         
@@ -888,6 +888,8 @@ const styles = StyleSheet.create({
   variantImage: {
     width: '100%',
     height: '100%',
+    resizeMode: 'contain',
+    backgroundColor: 'transparent',
   },
   variantImagePlaceholder: {
     flex: 1,

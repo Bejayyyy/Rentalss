@@ -170,6 +170,8 @@ const NotificationItem = ({ notification, onMarkRead, onRemove, setActionModalCo
                 Mark as read
               </Text>
             </TouchableOpacity>
+            
+            
           )}
           <TouchableOpacity 
             style={[styles.notificationActionButton, styles.removeButton]}
@@ -196,7 +198,7 @@ const NotificationItem = ({ notification, onMarkRead, onRemove, setActionModalCo
 };
 
 // Notifications Modal Component
-const NotificationsModal = ({ visible, notifications, onClose, onMarkRead, onMarkAllRead, onRemove,setActionModalConfig }) => {
+const NotificationsModal = ({ visible, notifications, onClose, onMarkRead, onMarkAllRead, onRemove,setActionModalConfig,onClearAll}) => {
   return (
     <Modal
       visible={visible}
@@ -214,6 +216,13 @@ const NotificationsModal = ({ visible, notifications, onClose, onMarkRead, onMar
             >
               <Text style={styles.markAllReadText}>Mark all read</Text>
             </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.clearAllButton} 
+              onPress={onClearAll}
+            >
+              <Text style={styles.clearAllText}>Clear all</Text>
+            </TouchableOpacity>
+            
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
               <Ionicons name="close" size={24} color="#666" />
             </TouchableOpacity>
@@ -683,6 +692,45 @@ export default function DashboardScreen({ navigation }) {
       console.error('Error marking notification as read:', err);
     }
   };
+  const handleClearAll = async () => {
+    setActionModalConfig({
+      title: 'Clear All Notifications',
+      message: 'Are you sure you want to clear all notifications? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          // Clear from local state immediately
+          setNotifications([]);
+  
+          // Mark all as dismissed in database
+          const { error } = await supabase
+            .from('notifications')
+            .update({ dismissed: true })
+            .eq('user_id', currentUserId)
+            .eq('dismissed', false);
+  
+          if (error) {
+            console.error('Error clearing all notifications:', error);
+            // Fetch fresh data if update fails
+            fetchNotifications();
+          } else {
+            // Show success feedback
+            setFeedbackModal({ 
+              visible: true, 
+              type: "success", 
+              message: "All notifications cleared successfully!" 
+            });
+          }
+        } catch (err) {
+          console.error('Error clearing all notifications:', err);
+          setFeedbackModal({ 
+            visible: true, 
+            type: "error", 
+            message: "Failed to clear notifications. Please try again." 
+          });
+        }
+      }
+    });
+  };
 
   const handleMarkAllRead = async () => {
     try {
@@ -994,6 +1042,7 @@ export default function DashboardScreen({ navigation }) {
         onClose={() => setShowNotifications(false)}
         onMarkRead={handleMarkNotificationRead}
         onMarkAllRead={handleMarkAllRead}
+        onClearAll={handleClearAll} 
         onRemove={handleRemoveNotification}
         setActionModalConfig={setActionModalConfig}
       />
@@ -1504,5 +1553,15 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 14,
     marginTop: 4,
+  },clearAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#fee2e2',
+    borderRadius: 6,
+  },
+  clearAllText: {
+    fontSize: 14,
+    color: '#ef4444',
+    fontWeight: '500',
   },
 });

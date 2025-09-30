@@ -48,6 +48,12 @@ const getStatusInfo = (status) => {
         message: 'Your booking has been cancelled. If you have any questions, please contact us.',
         title: 'Booking Cancelled'
       };
+    case 'declined':
+      return {
+        color: '#ef4444',
+        message: 'Unfortunately, we are unable to process your booking request at this time.',
+        title: 'Booking Declined'
+      };
     default:
       return {
         color: '#6b7280',
@@ -74,9 +80,14 @@ const createStatusUpdateEmail = (bookingData) => {
             .content { padding: 20px; background: #f9f9f9; }
             .booking-details { background: white; padding: 15px; margin: 15px 0; border-radius: 5px; }
             .status-update { background: ${statusInfo.color}20; border-left: 4px solid ${statusInfo.color}; padding: 15px; margin: 15px 0; border-radius: 5px; }
+            .decline-reason { background: #fef2f2; border: 1px solid #fecaca; padding: 15px; margin: 15px 0; border-radius: 5px; }
             .footer { background: #101010; color: white; padding: 15px; text-align: center; }
             .status-badge { color: ${statusInfo.color}; font-weight: bold; text-transform: uppercase; }
             .highlight { background: #fffbeb; padding: 10px; border-radius: 5px; margin: 10px 0; }
+            .important-notes { background: #f0f9ff; border: 1px solid #bfdbfe; padding: 15px; margin: 15px 0; border-radius: 5px; }
+            .important-notes h4 { margin-top: 0; color: #1e40af; }
+            .important-notes ul { margin-bottom: 0; }
+            .important-notes li { margin-bottom: 5px; }
         </style>
     </head>
     <body>
@@ -94,6 +105,14 @@ const createStatusUpdateEmail = (bookingData) => {
                     <p><strong>Your booking status has been updated to: <span class="status-badge">${bookingData.newStatus}</span></strong></p>
                     <p>${statusInfo.message}</p>
                 </div>
+
+                ${bookingData.newStatus === 'declined' && bookingData.decline_reason ? `
+                <div class="decline-reason">
+                    <h4>Reason for Decline:</h4>
+                    <p>${bookingData.decline_reason}</p>
+                    <p><em>We apologize for any inconvenience. Please feel free to contact us if you have any questions or would like to discuss alternative options.</em></p>
+                </div>
+                ` : ''}
                 
                 <div class="booking-details">
                     <h3>Booking Details:</h3>
@@ -106,7 +125,7 @@ const createStatusUpdateEmail = (bookingData) => {
                     <p><strong>Total Price:</strong> ₱${bookingData.total_price.toLocaleString()}</p>
                     <p><strong>Updated:</strong> ${new Date(bookingData.updated_date).toLocaleDateString()}</p>
                 </div>
-                
+
                 ${bookingData.newStatus === 'confirmed' ? `
                 <div class="highlight">
                     <p><strong>Next Steps for Confirmed Booking:</strong></p>
@@ -115,6 +134,17 @@ const createStatusUpdateEmail = (bookingData) => {
                         <li>Bring your driver's license and valid ID</li>
                         <li>Our team will contact you 24 hours before pickup</li>
                         <li>Vehicle inspection will be conducted before handover</li>
+                        <li><strong>Balance should be settled before you can use the car</strong></li>
+                    </ul>
+                </div>
+
+                <div class="important-notes">
+                    <h4>Important Rental Guidelines:</h4>
+                    <ul>
+                        <li><strong>Fuel Level:</strong> The fuel level must be the same when you return the vehicle as it was when you picked it up</li>
+                        <li><strong>Extended Hours:</strong> Every extended hour beyond the agreed return time will incur a charge of ₱300</li>
+                        <li><strong>Delivery Service:</strong> If you prefer vehicle delivery, we offer delivery within 5km from our garage for ₱250</li>
+                        <li><strong>Payment:</strong> Balance should be settled before you can use the car</li>
                     </ul>
                 </div>
                 ` : ''}
@@ -128,6 +158,15 @@ const createStatusUpdateEmail = (bookingData) => {
                         <li>Look forward to serving you again!</li>
                     </ul>
                 </div>
+
+                <div class="important-notes">
+                    <h4>Rental Guidelines Reminder:</h4>
+                    <ul>
+                        <li>We hope the fuel level was returned as per pickup condition</li>
+                        <li>Thank you for adhering to the return schedule</li>
+                        <li>Any additional charges for extended hours will be processed separately if applicable</li>
+                    </ul>
+                </div>
                 ` : ''}
                 
                 ${bookingData.newStatus === 'cancelled' ? `
@@ -137,6 +176,30 @@ const createStatusUpdateEmail = (bookingData) => {
                         <li>Your booking has been successfully cancelled</li>
                         <li>Refund processing will begin within 3-5 business days</li>
                         <li>You will receive a separate email about refund status</li>
+                    </ul>
+                </div>
+                ` : ''}
+
+                ${bookingData.newStatus === 'declined' ? `
+                <div class="highlight">
+                    <p><strong>What happens next:</strong></p>
+                    <ul>
+                        <li>No charges will be applied to your account</li>
+                        <li>You're welcome to submit a new booking request</li>
+                        <li>Contact us if you'd like to discuss alternative vehicle options</li>
+                        <li>We appreciate your understanding and interest in our services</li>
+                    </ul>
+                </div>
+                ` : ''}
+
+                ${bookingData.newStatus === 'pending' ? `
+                <div class="important-notes">
+                    <h4>While You Wait - Important Information:</h4>
+                    <ul>
+                        <li><strong>Payment:</strong> Balance should be settled before you can use the car</li>
+                        <li><strong>Fuel Policy:</strong> Vehicle must be returned with the same fuel level as pickup</li>
+                        <li><strong>Extended Hours:</strong> ₱300 charge applies for every hour beyond agreed return time</li>
+                        <li><strong>Delivery Option:</strong> Available within 5km from garage for ₱250</li>
                     </ul>
                 </div>
                 ` : ''}
@@ -166,6 +229,11 @@ app.post("/api/send-status-email", async (req, res) => {
     // Validate required data
     if (!bookingData.customer_email || !bookingData.customer_name || !bookingData.newStatus) {
       return res.status(400).json({ error: "Missing required booking data" });
+    }
+
+    // Validate decline reason if status is declined
+    if (bookingData.newStatus === 'declined' && !bookingData.decline_reason) {
+      return res.status(400).json({ error: "Decline reason is required when status is declined" });
     }
 
     const statusInfo = getStatusInfo(bookingData.newStatus);

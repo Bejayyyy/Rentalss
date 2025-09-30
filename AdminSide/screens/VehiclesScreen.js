@@ -646,7 +646,7 @@ export default function VehiclesScreen({ navigation }) {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <View style={styles.modalIconContainer}>
-              <Ionicons name="warning" size={32} color="#ef4444" />
+              <Ionicons name="warning" size={32} color="black" />
             </View>
             <Text style={styles.modalTitle}>Delete Vehicle</Text>
             <Text style={styles.modalMessage}>
@@ -2045,7 +2045,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "#fef2f2",
+    backgroundColor: "#f3f4f6",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 16,
@@ -2092,7 +2092,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 10,
-    backgroundColor: "#ef4444",
+    backgroundColor: "black",
     gap: 6,
   },
   modalButtonDisabled: {

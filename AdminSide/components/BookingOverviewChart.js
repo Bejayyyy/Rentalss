@@ -20,23 +20,34 @@ const monthNames = [
   "July","August","September","October","November","December"
 ];
 
+const statusOptions = [
+  { label: "All Status", value: "all" },
+  { label: "Pending", value: "pending" },
+  { label: "Confirmed", value: "confirmed" },
+  { label: "Completed", value: "completed" },
+  { label: "Cancelled", value: "cancelled" },
+  { label: "Declined", value: "declined" },
+];
+
 export default function BookingOverviewChart() {
   // filter states
   const [overviewFilter, setOverviewFilter] = useState("Weekly");
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedWeekRange, setSelectedWeekRange] = useState(null);
+  const [selectedStatus, setSelectedStatus] = useState("all");
 
   // dropdown modals
   const [yearDropdownVisible, setYearDropdownVisible] = useState(false);
   const [monthDropdownVisible, setMonthDropdownVisible] = useState(false);
   const [weekDropdownVisible, setWeekDropdownVisible] = useState(false);
+  const [statusDropdownVisible, setStatusDropdownVisible] = useState(false);
 
   const [chartData, setChartData] = useState([]);
 
   useEffect(() => {
     fetchChartData();
-  }, [overviewFilter, selectedYear, selectedMonth, selectedWeekRange]);
+  }, [overviewFilter, selectedYear, selectedMonth, selectedWeekRange, selectedStatus]);
 
   const getWeekRanges = () => {
     const year = selectedYear;
@@ -71,7 +82,7 @@ export default function BookingOverviewChart() {
     return weeks;
   };
 
-  // ✅ Real fetch from bookings
+  // ✅ Real fetch from bookings with status filter
   const fetchChartData = async () => {
     try {
       let startDate, endDate;
@@ -98,12 +109,19 @@ export default function BookingOverviewChart() {
         endDate = new Date(selectedYear, 11, 31);
       }
 
-      // Query bookings from Supabase
-      const { data, error } = await supabase
+      // Query bookings from Supabase with status filter
+      let query = supabase
         .from("bookings")
         .select("*")
         .gte("rental_start_date", startDate.toISOString().split("T")[0])
         .lte("rental_start_date", endDate.toISOString().split("T")[0]);
+
+      // Apply status filter if not "all"
+      if (selectedStatus !== "all") {
+        query = query.eq("status", selectedStatus);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -181,6 +199,17 @@ export default function BookingOverviewChart() {
       : `${percentage.toFixed(1)}%`;
   };
 
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "pending": return "#f59e0b";
+      case "confirmed": return "#10b981";
+      case "completed": return "#3b82f6";
+      case "cancelled": return "#ef4444";
+      case "declined": return "#6b7280";
+      default: return "#374151";
+    }
+  };
+
   // render line chart
   const renderLineChart = () => {
     if (chartData.length === 0) return null;
@@ -200,10 +229,13 @@ export default function BookingOverviewChart() {
       .map((p, i) => (i === 0 ? `M ${p.x},${p.y}` : `L ${p.x},${p.y}`))
       .join(" ");
   
-    // Summary (removed revenue calculations)
+    // Summary
     const totalBookings = chartData.reduce((sum, d) => sum + d.bookings, 0);
     const averageBookings = totalBookings / chartData.length;
     const trendPercentage = getTrendPercentage();
+    
+    // Get color based on selected status
+    const lineColor = selectedStatus !== "all" ? getStatusColor(selectedStatus) : getTrendColor();
   
     return (
       <View style={styles.chartContainer}>
@@ -219,8 +251,8 @@ export default function BookingOverviewChart() {
           <Svg height={chartHeight + 20} width={chartWidth}>
             <Defs>
               <LinearGradient id="lineGradient" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={getTrendColor()} stopOpacity="1" />
-                <Stop offset="1" stopColor={getTrendColor()} stopOpacity="0.2" />
+                <Stop offset="0" stopColor={lineColor} stopOpacity="1" />
+                <Stop offset="1" stopColor={lineColor} stopOpacity="0.2" />
               </LinearGradient>
             </Defs>
   
@@ -229,7 +261,7 @@ export default function BookingOverviewChart() {
   
             {/* Points */}
             {points.map((p, i) => (
-              <Circle key={i} cx={p.x} cy={p.y} r={3} fill={getTrendColor()} />
+              <Circle key={i} cx={p.x} cy={p.y} r={3} fill={lineColor} />
             ))}
           </Svg>
         </View>
@@ -243,7 +275,7 @@ export default function BookingOverviewChart() {
           ))}
         </View>
   
-        {/* Chart Stats - Removed Revenue */}
+        {/* Chart Stats */}
         <View style={styles.chartStats}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{totalBookings}</Text>
@@ -254,7 +286,7 @@ export default function BookingOverviewChart() {
             <Text style={styles.statLabel}>Avg Bookings</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: getTrendColor() }]}>
+            <Text style={[styles.statNumber, { color: lineColor }]}>
               {trendPercentage}
             </Text>
             <Text style={styles.statLabel}>Trend</Text>
@@ -269,7 +301,7 @@ export default function BookingOverviewChart() {
     <View style={styles.summaryCard}>
       <View style={styles.cardHeader}>
         <Text style={styles.sectionTitle}>Booking Overview</Text>
-        <Text style={[styles.trendText, { color: getTrendColor() }]}>
+        <Text style={[styles.trendText, { color: selectedStatus !== "all" ? getStatusColor(selectedStatus) : getTrendColor() }]}>
           {getTrendPercentage()}
         </Text>
       </View>
@@ -300,6 +332,26 @@ export default function BookingOverviewChart() {
 
         {/* Secondary Filters */}
         <View style={styles.secondaryFilterRow}>
+          {/* Status Filter */}
+          <TouchableOpacity
+            style={[
+              styles.secondaryFilterButton,
+              selectedStatus !== "all" && { 
+                borderColor: getStatusColor(selectedStatus),
+                backgroundColor: `${getStatusColor(selectedStatus)}10`
+              }
+            ]}
+            onPress={() => setStatusDropdownVisible(true)}
+          >
+            <Text style={[
+              styles.secondaryFilterButtonText,
+              selectedStatus !== "all" && { color: getStatusColor(selectedStatus) }
+            ]}>
+              {statusOptions.find(s => s.value === selectedStatus)?.label}
+            </Text>
+            <Ionicons name="chevron-down" size={14} color={selectedStatus !== "all" ? getStatusColor(selectedStatus) : "#6b7280"} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.secondaryFilterButton}
             onPress={() => setYearDropdownVisible(true)}
@@ -337,6 +389,52 @@ export default function BookingOverviewChart() {
       </View>
 
       {renderLineChart()}
+
+      {/* Status Dropdown */}
+      <Modal visible={statusDropdownVisible} transparent animationType="fade">
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          onPress={() => setStatusDropdownVisible(false)}
+        >
+          <View style={styles.dropdownContainer}>
+            <Text style={styles.dropdownTitle}>Filter by Status</Text>
+            <FlatList
+              data={statusOptions}
+              keyExtractor={(item) => item.value}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownItem,
+                    selectedStatus === item.value && styles.selectedDropdownItem
+                  ]}
+                  onPress={() => {
+                    setSelectedStatus(item.value);
+                    setStatusDropdownVisible(false);
+                  }}
+                >
+                  <View style={styles.statusDropdownItem}>
+                    {item.value !== "all" && (
+                      <View style={[
+                        styles.statusIndicator,
+                        { backgroundColor: getStatusColor(item.value) }
+                      ]} />
+                    )}
+                    <Text style={[
+                      styles.dropdownText,
+                      selectedStatus === item.value && styles.selectedDropdownText
+                    ]}>
+                      {item.label}
+                    </Text>
+                  </View>
+                  {selectedStatus === item.value && (
+                    <Ionicons name="checkmark" size={18} color="#10b981" />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Year Dropdown */}
       <Modal visible={yearDropdownVisible} transparent animationType="fade">
@@ -390,7 +488,7 @@ export default function BookingOverviewChart() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Week Dropdown - Fixed */}
+      {/* Week Dropdown */}
       <Modal visible={weekDropdownVisible} transparent animationType="fade">
         <TouchableOpacity 
           style={styles.modalOverlay}
@@ -470,6 +568,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     marginTop: 12,
+    flexWrap: "wrap",
   },
   secondaryFilterButton: {
     flexDirection: "row",
@@ -496,8 +595,39 @@ const styles = StyleSheet.create({
     width: "80%",
     maxHeight: "60%",
   },
-  dropdownItem: { padding: 12 },
-  dropdownText: { fontSize: 16, fontWeight: "500" },
+  dropdownTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  dropdownItem: { 
+    padding: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  selectedDropdownItem: {
+    backgroundColor: "#f0f9ff",
+  },
+  dropdownText: { 
+    fontSize: 16, 
+    fontWeight: "500" 
+  },
+  selectedDropdownText: {
+    color: "#10b981",
+    fontWeight: "600",
+  },
+  statusDropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   chartStats: {
     flexDirection: "row",
     justifyContent: "space-between",

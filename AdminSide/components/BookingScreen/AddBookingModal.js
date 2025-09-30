@@ -47,6 +47,8 @@ export default function AddBookingModal({
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [vehiclePickerVisible, setVehiclePickerVisible] = useState(false);
+  const [validationError, setValidationError] = useState("");
+const [showValidationModal, setShowValidationModal] = useState(false);
 
   // Reset form when modal opens/closes
   useEffect(() => {
@@ -90,39 +92,44 @@ export default function AddBookingModal({
       'vehicle_variant_id',
       'license_number'
     ];
-
+  
     for (let field of required) {
       if (!newBooking[field]) {
-        Alert.alert('Validation Error', `Please fill in ${field.replace('_', ' ')}`);
+        setValidationError(`Please fill in ${field.replace('_', ' ')}`);
+        setShowValidationModal(true);
         return false;
       }
     }
-
+  
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(newBooking.customer_email)) {
-      Alert.alert('Validation Error', 'Please enter a valid email address');
+      setValidationError('Please enter a valid email address');
+      setShowValidationModal(true);
       return false;
     }
-
+  
     // Validate date range
     const startDate = new Date(newBooking.rental_start_date);
     const endDate = new Date(newBooking.rental_end_date);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
+  
     if (startDate < today) {
-      Alert.alert('Validation Error', 'Start date cannot be in the past');
+      setValidationError('Start date cannot be in the past');
+      setShowValidationModal(true);
       return false;
     }
-
+  
     if (endDate <= startDate) {
-      Alert.alert('Validation Error', 'End date must be after start date');
+      setValidationError('End date must be after start date');
+      setShowValidationModal(true);
       return false;
     }
-
+  
     return true;
   };
+  
 
   const handleSave = () => {
     if (validateBooking()) {
@@ -382,6 +389,15 @@ export default function AddBookingModal({
               confirmText="Add Booking"
               onClose={() => setConfirmVisible(false)}
               onConfirm={handleConfirmSave}
+            />
+            <ActionModal
+              visible={showValidationModal}
+              type="error"
+              title="Validation Error"
+              message={validationError}
+              confirmText="Close"
+              onClose={() => setShowValidationModal(false)}
+              onConfirm={() => setShowValidationModal(false)}
             />
           </Animated.View>
         </KeyboardAvoidingView>

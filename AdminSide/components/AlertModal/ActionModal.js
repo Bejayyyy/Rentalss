@@ -19,22 +19,29 @@ export default function ActionModal({
       title: "Confirm Action",
       message: "Are you sure you want to continue?",
       confirmText: "Confirm",
-      icon: <Ionicons name="help-circle" size={32} color="#3b82f6" />,
-      confirmColor: "#3b82f6",
+      icon: <Ionicons name="help-circle" size={32} color="black" />,
+      confirmColor: "black",
     },
     delete: {
       title: "Delete Item",
       message: "This action cannot be undone. Proceed?",
       confirmText: "Delete",
-      icon: <Ionicons name="trash" size={32} color="#ef4444" />,
-      confirmColor: "#ef4444",
+      icon: <Ionicons name="trash" size={32} color="black" />,
+      confirmColor: "black",
     },
     success: {
       title: "Success",
       message: "Your action was completed successfully!",
       confirmText: "OK",
-      icon: <Ionicons name="checkmark-circle" size={32} color="#10b981" />,
-      confirmColor: "#10b981",
+      icon: <Ionicons name="checkmark-circle" size={32} color="black" />,
+      confirmColor: "black",
+    },
+    error: {
+      title: "Error",
+      message: "Something went wrong.",
+      confirmText: "Close",
+      icon: <Ionicons name="alert-circle" size={32} color="black" />,
+      confirmColor: "black",
     },
   }
 
@@ -69,13 +76,15 @@ export default function ActionModal({
           {/* Show buttons only if NOT success */}
           {type !== "success" && (
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancelButton}
-                onPress={onClose}
-                disabled={loading}
-              >
-                <Text style={styles.modalCancelText}>{cancelText}</Text>
-              </TouchableOpacity>
+              {type !== "error" && (
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={onClose}
+              disabled={loading}
+            >
+              <Text style={styles.modalCancelText}>{cancelText}</Text>
+            </TouchableOpacity>
+          )}
 
               <TouchableOpacity
                 style={[

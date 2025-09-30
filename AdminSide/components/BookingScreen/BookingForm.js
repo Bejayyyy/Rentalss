@@ -54,30 +54,30 @@ export default function BookingForm({
       }
     }
   }, [booking?.rental_start_date, booking?.rental_end_date, vehicleDetails?.price_per_day, isEdit]);
+
   // Auto-calculate total price when dates or vehicle changes
-useEffect(() => {
-  if (booking?.rental_start_date && booking?.rental_end_date && vehicleDetails?.price_per_day) {
-    const startDate = new Date(booking.rental_start_date);
-    const endDate = new Date(booking.rental_end_date);
+  useEffect(() => {
+    if (booking?.rental_start_date && booking?.rental_end_date && vehicleDetails?.price_per_day) {
+      const startDate = new Date(booking.rental_start_date);
+      const endDate = new Date(booking.rental_end_date);
 
-    // Only calculate if end > start
-    if (endDate <= startDate) return;
+      // Only calculate if end > start
+      if (endDate <= startDate) return;
 
-    const diffTime = Math.abs(endDate - startDate);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const diffTime = Math.abs(endDate - startDate);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays > 0) {
-      const totalPrice = diffDays * vehicleDetails.price_per_day;
+      if (diffDays > 0) {
+        const totalPrice = diffDays * vehicleDetails.price_per_day;
 
-      updateBooking((prev) => ({
-        ...prev,
-        total_price: totalPrice.toString(),
-        rental_days: diffDays,
-      }));
+        updateBooking((prev) => ({
+          ...prev,
+          total_price: totalPrice.toString(),
+          rental_days: diffDays,
+        }));
+      }
     }
-  }
-}, [booking?.rental_start_date, booking?.rental_end_date, vehicleDetails?.price_per_day]);
-
+  }, [booking?.rental_start_date, booking?.rental_end_date, vehicleDetails?.price_per_day]);
 
   const fetchVehicleDetails = async (vehicleId) => {
     try {
@@ -183,7 +183,6 @@ useEffect(() => {
       throw err;
     }
   };
-  
 
   // Use allVehicles for edit mode, availableVehicles for add mode
   const vehicleSource = isEdit ? allVehicles : (availableVehicles || []);
@@ -299,7 +298,7 @@ useEffect(() => {
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Customer Name</Text>
+          <Text style={styles.inputLabel}>Customer Name *</Text>
           <TextInput
             style={styles.input}
             value={booking.customer_name || ""}
@@ -312,7 +311,7 @@ useEffect(() => {
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Email</Text>
+          <Text style={styles.inputLabel}>Email *</Text>
           <TextInput
             style={styles.input}
             value={booking.customer_email || ""}
@@ -683,13 +682,19 @@ useEffect(() => {
                 { label: "Confirmed", value: "confirmed" },
                 { label: "Completed", value: "completed" },
                 { label: "Cancelled", value: "cancelled" },
+                { label: "Declined", value: "declined" },
               ]}
               labelField="label"
               valueField="value"
               placeholder="Select status"
               value={booking.status}
               onChange={(item) =>
-                updateBooking((prev) => ({ ...prev, status: item.value }))
+                updateBooking((prev) => ({ 
+                  ...prev, 
+                  status: item.value,
+                  // Clear decline reason if status is not declined
+                  decline_reason: item.value !== 'declined' ? '' : prev.decline_reason
+                }))
               }
               renderItem={(item, selected) => (
                 <View style={[
@@ -703,6 +708,26 @@ useEffect(() => {
                 </View>
               )}
             />
+          </View>
+        )}
+
+        {/* Decline Reason (only show when status is declined) */}
+        {isEdit && booking.status === 'declined' && (
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Decline Reason *</Text>
+            <TextInput
+              style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
+              value={booking.decline_reason || ""}
+              onChangeText={(text) =>
+                updateBooking((prev) => ({ ...prev, decline_reason: text }))
+              }
+              placeholder="Please provide a reason for declining this booking..."
+              multiline
+              numberOfLines={3}
+            />
+            <Text style={styles.inputHint}>
+              This reason will be included in the email notification to the customer.
+            </Text>
           </View>
         )}
       </View>

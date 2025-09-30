@@ -64,8 +64,10 @@ export default function BookingsAnalyticsScreen() {
             image_url
           )
         `)
-        .gte('created_at', startDate)
+        //.gte('created_at', startDate)
         .order('created_at', { ascending: false });
+        console.log("Bookings Data:", bookingsData);
+
 
       if (bookingsError) {
         throw bookingsError;
@@ -76,16 +78,21 @@ export default function BookingsAnalyticsScreen() {
       // Calculate statistics
       const totalBookings = bookingsData?.length || 0;
       // ✅ Only completed bookings count towards revenue
-      const totalRevenue = bookingsData?.filter((b) => b.status === "completed")
-          .reduce((sum, booking) => sum + parseFloat(booking.total_price || 0), 0) || 0;     
+      const totalRevenue =
+  bookingsData
+    ?.filter((b) => b.status?.trim().toLowerCase() === "completed")
+    .reduce((sum, booking) => sum + parseFloat(booking.total_price || 0), 0) || 0;
+   
       const averageBookingValue = totalBookings > 0 ? totalRevenue / totalBookings : 0;
         
 
       const statusCounts =
-      bookingsData?.reduce((acc, booking) => {
-        acc[booking.status] = (acc[booking.status] || 0) + 1;
-        return acc;
-      }, {}) || {};
+  bookingsData?.reduce((acc, booking) => {
+    const status = booking.status?.trim().toLowerCase(); // normalize
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {}) || {};
+
 
       setStats({
         totalBookings,
