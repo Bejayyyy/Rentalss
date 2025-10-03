@@ -798,7 +798,6 @@ const showConfirmation = (title, message, onConfirm) => {
 
   
   
-  
   const formatAmount = (amount) => {
     return `₱${parseFloat(amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
   };
@@ -823,7 +822,7 @@ const showConfirmation = (title, message, onConfirm) => {
       case 'cancelled':
         return '#ef4444';
       case 'declined':
-      return '#dc2626'; // Darker red for declined
+      return '#ff4500'; // Darker red for declined
       default:
         return '#6b7280';
     }
@@ -1287,7 +1286,7 @@ const showConfirmation = (title, message, onConfirm) => {
             disableArrowLeft={false}
             disableArrowRight={false}
             disableAllTouchEventsForDisabledDays={true}
-            renderHeader={(date) => {
+            eadereader={(date) => {
               const monthNames = [
                 'January', 'February', 'March', 'April', 'May', 'June',
                 'July', 'August', 'September', 'October', 'November', 'December'
@@ -1347,7 +1346,7 @@ const showConfirmation = (title, message, onConfirm) => {
             <Ionicons 
               name="chevron-back" 
               size={20} 
-              color={currentPage === 1 ? "#d1d5db" : "#3b82f6"} 
+              color={currentPage === 1 ? "#222" : "#222"} 
             />
           </TouchableOpacity>
 
@@ -1397,7 +1396,7 @@ const showConfirmation = (title, message, onConfirm) => {
             <Ionicons 
               name="chevron-forward" 
               size={20} 
-              color={currentPage === totalPages ? "#d1d5db" : "#3b82f6"} 
+              color={currentPage === totalPages ? "#222" : "#222"} 
             />
           </TouchableOpacity>
         </View>
@@ -1408,25 +1407,21 @@ const showConfirmation = (title, message, onConfirm) => {
   const renderHeader = () => (
     <View>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Bookings</Text>
-
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Bookings Management</Text>
+        </View>
         <View style={styles.headerActions}>
           <TouchableOpacity 
-          style={styles.addButton} 
-          onPress={openAddModal}
-        >
-          <Ionicons name="add" size={20} color="white" />
-          <Text style={styles.addButtonText}>Add Booking</Text>
-        </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={28} color="#222" />
+            style={styles.addButton} 
+            onPress={openAddModal}
+          >
+            <Ionicons name="add" size={20} color="white" />
+            <Text style={styles.addButtonText}>Add Booking</Text>
           </TouchableOpacity>
+        
         </View>
       </View>
-
-      
-
+  
       <View style={styles.listHeaderCard}>
         <Text style={styles.sectionTitle}>All Bookings</Text>
         <View style={styles.filtersSection}>
@@ -1440,7 +1435,7 @@ const showConfirmation = (title, message, onConfirm) => {
               </Text>
               <Ionicons name="chevron-down" size={16} color="#6b7280" />
             </TouchableOpacity>
-
+  
             <TouchableOpacity 
               style={styles.dropdownButton}
               onPress={() => setDateDropdownVisible(true)}
@@ -1450,7 +1445,7 @@ const showConfirmation = (title, message, onConfirm) => {
               </Text>
               <Ionicons name="chevron-down" size={16} color="#6b7280" />
             </TouchableOpacity>
-
+  
             <TouchableOpacity 
               style={styles.dropdownButton}
               onPress={() => setVehicleTypeDropdownVisible(true)}
@@ -1611,172 +1606,58 @@ const showConfirmation = (title, message, onConfirm) => {
     </SafeAreaView>
   );
 }
-const enhancedCalendarStyles = StyleSheet.create({
-  calendarModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  calendarModalContainer: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    width: '100%',
-    maxWidth: 380,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 15,
-    overflow: 'hidden',
-  },
-  calendarModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    backgroundColor: '#f8fafc',
-  },
-  calendarModalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  calendarCloseButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#f3f4f6',
-  },
-  calendarModalFooter: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    backgroundColor: '#f8fafc',
-  },
-  dateSelectionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dateSelectionItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  dateSelectionLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: '500',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-  },
-  dateSelectionValue: {
-    fontSize: 14,
-    color: '#1f2937',
-    fontWeight: '600',
-  },
-  dateSelectionDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: '#e5e7eb',
-    marginHorizontal: 16,
-  },
-  
-  // Enhanced date input styling
-  dateInput: {
-    flexDirection: "row",   // place text + icon horizontally
-    justifyContent: "space-between", // push them apart
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "#d1d5db", // gray-300
-    borderRadius: 8,
-    backgroundColor: "white",
-  },
-  
-  dateInputText: {
-    fontSize: 14,
-    color: "#111827", // gray-900
-    flexShrink: 1, // allows wrapping if text is long
-  },
-  placeholderText: {
-    color: '#9ca3af',
-    fontStyle: 'italic',
-    fontSize: 16,
-  },
-});
+
+
 
 const styles = StyleSheet.create({
-  ...enhancedCalendarStyles,
-  dateInput: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    minHeight: 48,
-  },
-  dateInputText: {
-    fontSize: 16,
-    color: '#1f2937',
-    fontWeight: '500',
-  },
-  placeholderText: {
-    color: '#9ca3af',
-    fontStyle: 'italic',
-  },
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: "#fcfcfc",
   },
-  listContent: {
-    paddingBottom: 32,
-  },
+
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#fcfcfc",
+    paddingHorizontal: 25,
+    marginTop: 24,
+    marginBottom: 24,
+    paddingTop: 16,
+  },
+  headerContent: {
+    flex: 1,
+    backgroundColor: "#fcfcfc",
+
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111827",
+    letterSpacing: -0.5,
+    marginBottom: 4,
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
+ 
   addButton: {
-    backgroundColor: 'black',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#222",
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    paddingVertical: 10,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  addButtonText:{
-    color: "white"
+  addButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 6,
   },
-  logoutButton: {
-    padding: 8,
-    borderRadius: 8,
-  },
+
   summaryCard: {
     backgroundColor: 'white',
     marginHorizontal: 16,
@@ -1950,7 +1831,7 @@ const styles = StyleSheet.create({
   },
   // Pagination styles
   paginationContainer: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#fcfcfc',
     borderRadius: 12,
     marginTop: 16,
     padding: 16,
@@ -1970,7 +1851,7 @@ const styles = StyleSheet.create({
   },
   paginationText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#222',
     fontWeight: '500',
   },
   paginationControls: {
@@ -1987,8 +1868,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
   },
   paginationButtonDisabled: {
-    backgroundColor: '#f9fafb',
-    borderColor: '#f3f4f6',
+    backgroundColor: '#fcfcfc',
+    borderColor: '#fcfcfc',
   },
   pageNumbers: {
     flexDirection: 'row',
@@ -2003,13 +1884,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
   },
   pageNumberButtonActive: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
+    backgroundColor: '#222',
+    borderColor: '#222',
   },
   pageNumberText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1f2937',
+    color: '#222',
   },
   pageNumberTextActive: {
     color: 'white',
@@ -2069,13 +1950,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     padding: 16,
     borderRadius: 12,
+    padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-    position: 'relative',
-    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
     marginHorizontal: 16,
   },
   statusIndicator: {

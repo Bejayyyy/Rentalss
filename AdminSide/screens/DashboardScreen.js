@@ -799,14 +799,16 @@ export default function DashboardScreen({ navigation }) {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'pending':
-        return '#f59e0b';
       case 'confirmed':
         return '#10b981';
+      case 'pending':
+        return '#f59e0b';
       case 'completed':
         return '#3b82f6';
       case 'cancelled':
         return '#ef4444';
+      case 'declined':
+      return '#ff4500'; // Darker red for declined
       default:
         return '#6b7280';
     }
@@ -844,8 +846,7 @@ export default function DashboardScreen({ navigation }) {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
+<View style={styles.container}>      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>Dashboard</Text>
@@ -876,28 +877,28 @@ export default function DashboardScreen({ navigation }) {
             title="Total Vehicles"
             value={dashboardData.totalVehicles}
             icon="car"
-            color="#4CAF50"
+            color="#222"
             onPress={() => navigation?.navigate?.('Vehicles')}
           />
           <StatCard
             title="Available"
             value={dashboardData.availableVehicles}
             icon="checkmark-circle"
-            color="#2196F3"
+            color="#222"
             onPress={() => navigation?.navigate?.('Vehicles')}
           />
           <StatCard
             title="Active Rentals"
             value={dashboardData.activeBookings}
             icon="time"
-            color="#FF9800"
+            color="#222"
             onPress={() => navigation?.navigate?.('Bookings')}
           />
           <StatCard
             title="Today's Bookings"
             value={dashboardData.todayBookings}
             icon="calendar"
-            color="#9C27B0"
+            color="#222"
             onPress={() => navigation?.navigate?.('Bookings')}
           />
         </View>
@@ -949,34 +950,43 @@ export default function DashboardScreen({ navigation }) {
             <Text style={styles.sectionTitle}>Quick Actions</Text>
           </View>
           <View style={styles.actionsGrid}>
+          <QuickActionCard
+              title="New Booking"
+              description="Create new rental booking"
+              icon="add"
+              color="#222"
+              onPress={() => navigation?.navigate?.('Bookings', { screen: 'AddBooking' })}
+            />
             <QuickActionCard
               title="Add Vehicle"
               description="Add new vehicle to fleet"
-              icon="add-circle"
-              color="#FF6B35"
+              icon="car"
+              color="#222"
               onPress={() => navigation?.navigate?.('Vehicles', { screen: 'AddVehicle' })}
             />
+
             <QuickActionCard
-              title="View Calendar"
-              description="Check rental schedule"
-              icon="calendar"
-              color="#2196F3"
-              onPress={() => navigation?.navigate?.('Calendar')}
+              title="Add Owner"
+              description="Add new Owner"
+              icon="person"
+              color="#222"
+              onPress={() => navigation?.navigate?.('CarOwners', { screen: 'CarOwners' })}
             />
             <QuickActionCard
               title="Analytics"
               description="View booking analytics"
               icon="analytics"
-              color="#9C27B0"
+              color="#222"
               onPress={() => navigation?.navigate?.('Reports')}
             />
-            <QuickActionCard
-              title="New Booking"
-              description="Create new rental booking"
-              icon="add"
-              color="#4CAF50"
-              onPress={() => navigation?.navigate?.('Bookings', { screen: 'AddBooking' })}
+             <QuickActionCard
+              title="View Calendar"
+              description="Check rental schedule"
+              icon="calendar"
+              color="#222"
+              onPress={() => navigation?.navigate?.('Calendar')}
             />
+          
           </View>
         </View>
 
@@ -1072,15 +1082,16 @@ export default function DashboardScreen({ navigation }) {
         onClose={() => setFeedbackModal({ visible: false, type: "success", message: "" })}
         onConfirm={() => setFeedbackModal({ visible: false, type: "success", message: "" })}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: 'white', 
+    backgroundColor: '#fcfcfc', 
     paddingHorizontal: 18, 
+    justifyContent: 'space-between', 
     paddingTop: 8 
   },
   header: { 
@@ -1103,22 +1114,24 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 2,
   },
+  
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
+  
   notificationBell: {
     position: 'relative',
-    padding: 8,
+    padding: 10,
     borderRadius: 8,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#black',
   },
   notificationBadge: {
     position: 'absolute',
     top: 4,
     right: 4,
-    backgroundColor: '#FF6B35',
+    backgroundColor: '#222',
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -1295,25 +1308,23 @@ const styles = StyleSheet.create({
   statsContainer: { 
     flexDirection: 'row', 
     flexWrap: 'wrap', 
-    gap: 16, 
+    justifyContent: 'space-between', // ✅ evenly space cards
     marginBottom: 24,
   },
   statCard: { 
     backgroundColor: 'white', 
     borderRadius: 16, 
     padding: 16, 
-    width: '47%', 
+    width: '49%', // ✅ perfect 2-per-row with space-between
+    marginBottom: 16, // ✅ keeps vertical spacing instead of gap
     borderWidth: 1, 
     borderColor: '#e5e7eb',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
-    alignItems: 'center' 
+    alignItems: 'center',
   },
   statContent: { 
     alignItems: 'center' 
@@ -1326,6 +1337,7 @@ const styles = StyleSheet.create({
     fontWeight: '800', 
     marginBottom: 4 
   },
+  
   statTitle: { 
     color: '#374151', 
     fontSize: 12, 
@@ -1449,7 +1461,7 @@ const styles = StyleSheet.create({
   },
   viewAllText: { 
     fontSize: 14, 
-    color: '#FF6B35', 
+    color: '#222', 
     fontWeight: '600' 
   },
   actionsGrid: { 

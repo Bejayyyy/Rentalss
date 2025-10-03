@@ -776,17 +776,14 @@ export default function VehiclesScreen({ navigation }) {
 
   const renderHeader = () => {
     const stats = getVehicleStats()
-
     return (
       <>
         {/* Header with Enhanced Design */}
         <View style={styles.headerContainer}>
           <View style={styles.header}>
             <View style={styles.headerContent}>
-              <Text style={styles.headerTitle}>Vehicle</Text>
-              <Text style={styles.headerSubtitle}>
-                Manage your rental vehicles
-              </Text>
+              <Text style={styles.headerTitle}>Vehicle Management</Text>
+            
             </View>
             <TouchableOpacity 
               style={styles.addButton}
@@ -803,25 +800,22 @@ export default function VehiclesScreen({ navigation }) {
           <View style={styles.statsGrid}>
             <View style={styles.statCard}>
               <View style={styles.statIconContainer}>
-                <Ionicons name="car-sport" size={24} color="#222" />
+                <Ionicons name="car" size={28} color="#222" />
               </View>
               <Text style={styles.statValue}>{vehicles.length}</Text>
               <Text style={styles.statLabel}>Total Fleet</Text>
               <View style={styles.statTrend}>
-                <Ionicons name="trending-up" size={12} color="#10b981" />
-                <Text style={styles.statTrendText}>Fleet size</Text>
               </View>
             </View>
             
             <View style={styles.statCard}>
               <View style={styles.statIconContainer}>
-                <Ionicons name="color-palette" size={24} color="#222" />
+                <Ionicons name="color-palette" size={28} color="#222" />
               </View>
               <Text style={styles.statValue}>{vehicleVariants.length}</Text>
               <Text style={styles.statLabel}>Color Variants</Text>
               <View style={styles.statTrend}>
-                <Ionicons name="options" size={12} color="#8b5cf6" />
-                <Text style={[styles.statTrendText, { color: "#8b5cf6" }]}>Total options</Text>
+                
               </View>
             </View>
           </View>
@@ -829,25 +823,23 @@ export default function VehiclesScreen({ navigation }) {
           <View style={styles.statsGrid}>
             <View style={styles.statCard}>
               <View style={styles.statIconContainer}>
-                <Ionicons name="time" size={24} color="#222" />
+                <Ionicons name="time" size={28} color="#222" />
               </View>
               <Text style={styles.statValue}>{stats.activeRentals}</Text>
               <Text style={styles.statLabel}>Active Rentals</Text>
               <View style={styles.statTrend}>
-                <Ionicons name="pulse" size={12} color="#3b82f6" />
-                <Text style={[styles.statTrendText, { color: "#3b82f6" }]}>Currently active</Text>
+                
               </View>
             </View>
 
             <View style={styles.statCard}>
               <View style={styles.statIconContainer}>
-                <Ionicons name="analytics" size={24} color="#222" />
+                <Ionicons name="analytics" size={28} color="#222" />
               </View>
               <Text style={styles.statValue}>{stats.totalBookings}</Text>
               <Text style={styles.statLabel}>Total Bookings</Text>
               <View style={styles.statTrend}>
-                <Ionicons name="bar-chart" size={12} color="#f59e0b" />
-                <Text style={[styles.statTrendText, { color: "#f59e0b" }]}>All time</Text>
+                
               </View>
             </View>
           </View>
@@ -1232,8 +1224,8 @@ export default function VehiclesScreen({ navigation }) {
   )
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ActionModal
+<View style={styles.container}>
+<ActionModal
         visible={feedbackModal.visible}
         type={feedbackModal.type}
         title={feedbackModal.type === "success" ? "Success" : "Error"}
@@ -1271,33 +1263,30 @@ export default function VehiclesScreen({ navigation }) {
       
       {renderDeleteModal()}
       {renderFiltersModal()}
-    </SafeAreaView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#fcfcfc",
   },
-  headerContainer: {
-    backgroundColor: "white",
-    paddingBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
+
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
+    backgroundColor: "#fcfcfc",
+    paddingHorizontal: 25,
+    marginTop: 24,
+    marginBottom: 24,
     paddingTop: 16,
   },
   headerContent: {
     flex: 1,
+    backgroundColor: "#fcfcfc",
+
   },
   headerTitle: {
     fontSize: 28,
@@ -1306,11 +1295,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     marginBottom: 4,
   },
-  headerSubtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-    fontWeight: "500",
-  },
+ 
+ 
   addButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1318,7 +1304,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
-    shadowColor: "#000",
+    shadowColor: "#fcfcfc",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
@@ -1330,62 +1316,50 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 6,
   },
-  statsSection: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
+  statsContainer: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 8,
   },
   statsGrid: {
-    flexDirection: "row",
-    gap: 16,
-    marginBottom: 16,
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+    paddingHorizontal: 20,
   },
   statCard: {
-    flex: 1,
-    backgroundColor: "white",
+    backgroundColor: 'white',
     borderRadius: 16,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    padding: 16,
+    flex: 1,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+    alignItems: 'center',
   },
   statIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#f8fafc",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   statValue: {
     fontSize: 24,
-    fontWeight: "800",
-    color: "#111827",
+    fontWeight: '800',
+    color: '#111827',
     marginBottom: 4,
   },
   statLabel: {
+    color: '#374151',
     fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 8,
+    fontWeight: '500',
+    textAlign: 'center',
   },
-  statTrend: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  statTrendText: {
-    fontSize: 11,
-    color: "#10b981",
-    fontWeight: "500",
-    marginLeft: 4,
-  },
-  // Filter Dropdowns Section
+  statTrend: {},
   filterDropdownsSection: {
     paddingHorizontal: 20,
     paddingTop: 24,
@@ -1418,17 +1392,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "white",
+    backgroundColor: 'white',
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    padding: 16,
+    flex: 1,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   filterDropdownActive: {
     backgroundColor: "#222",
@@ -1569,7 +1546,6 @@ const styles = StyleSheet.create({
   activeFilterCountText: {
     color: "white",
   },
-  // Active Filters Section
   activeFiltersSection: {
     paddingHorizontal: 20,
     paddingBottom: 24,
@@ -1615,7 +1591,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#0369a1",
   },
-  // Filters Modal Styles
   filtersModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -1716,7 +1691,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "white",
   },
-  // Pagination Styles
   paginationContainer: {
     backgroundColor: "white",
     paddingHorizontal: 20,
@@ -1794,7 +1768,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   listContainer: {
-    paddingHorizontal: 20,
     paddingBottom: 20,
   },
   vehicleCard: {
@@ -1808,6 +1781,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#f1f5f9",
     overflow: "hidden",
+    marginHorizontal: 20,
   },
   imageContainer: {
     position: "relative",
@@ -2017,7 +1991,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 8,
   },
-  // Delete Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -2103,4 +2076,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "white",
   },
-}) 
+})

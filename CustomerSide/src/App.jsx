@@ -1,5 +1,7 @@
 
 import { useState, useEffect, useRef } from "react"
+import CarsPage from './CarsPage'
+import { useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronUp, X, CheckCircle, AlertCircle, Menu, ChevronLeft, ChevronRight, Calendar, User, Clock, CreditCard, Upload } from "lucide-react"
 import { Car, Users, Gauge } from "lucide-react"
 import { MapPin, Phone, Mail, Clock as ClockIcon } from "lucide-react"
@@ -156,13 +158,15 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
 
           {/* Car Header */}
           <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-              {car.make}
-              <span className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-600">
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+              {car.model}
+             
+            </h1>
+            <h2 className="text-xl font-light text-gray-700">{car.make}
+            <span className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-600">
                 {car.year}
               </span>
-            </h1>
-            <h2 className="text-xl font-light text-gray-700">{car.model}</h2>
+            </h2>
           </div>
 
      {/* Specs */}
@@ -904,7 +908,7 @@ const DetailsModal = ({ isOpen, onClose, car, onRentClick }) => {
     }, [refs])
   
     return (
-      <nav className="bg-[#eff2f7] sticky top-0 z-50 shadow-md">
+      <nav className="bg-[#eff2f7] sticky top-0 z-50 ">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             {/* Logo */}
@@ -1120,7 +1124,7 @@ At The Rental Den, it’s more than just renting cars – it’s about helping y
     ]
   
     return (
-      <section className="py-20 mb-20 bg-[#F0F5F8] relative overflow-hidden">
+      <section className="py-20 mb-15 bg-[#F0F5F8] relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
             Why Choose Us?
@@ -1173,55 +1177,59 @@ At The Rental Den, it’s more than just renting cars – it’s about helping y
 /* ===========================
    How It Works
    =========================== */
-const HowItWorks = () => {
-  const steps = [
-    {
-      number: "01",
-      title: "Find a Car You'll Love",
-      description:
-        "Take a look through our curated collection of vehicles. Whether you need efficiency, space, or a bit of luxury, your perfect match is waiting for you right here in our fleet.",
-    },
-    {
-      number: "02",
-      title: "Secure Your Dates Online",
-      description:
-        "Once you’ve made your choice, our simple booking process makes it a breeze to lock in your rental. Just pick your dates, provide a few details, and your car will be reserved just for you.",
-    },
-    {
-      number: "03",
-      title: "Start Your Adventure",
-      description:
-        "Come see us to pick up your keys! Our friendly team will get you checked in quickly so you can start your journey. All that's left to do is enjoy the ride.",
-    },
-  ]
-
-  return (
-    <section className="relative w-full mt-10 overflow-hidden border-t border-b border-gray-900">
-      <div className="grid grid-cols-1 lg:grid-cols-2">
-        <div className="bg-[#F0F5F8] text-gray-900 py-16 lg:py-20 px-6 md:px-10 lg:pl-16 xl:pl-24 lg:pr-10 flex flex-col">
-          <div className="flex justify-center">
-            <h2 className="text-4xl lg:text-5xl font-bold mb-10">How It Works</h2>
-          </div>
-          <div className="space-y-12 max-w-2xl mx-auto">
-            {steps.map((s) => (
-              <div key={s.number} className="flex items-start">
-                <span className="text-5xl font-bold leading-none mr-6 w-16">{s.number}</span>
-                <div className="mt-5">
-                  <h3 className="text-xl font-semibold mb-2">{s.title}</h3>
-                  <p className="text-gray-900 leading-relaxed">{s.description}</p>
+   const HowItWorks = () => {
+    const steps = [
+      {
+        number: "01",
+        title: "Find a Car You'll Love",
+        description:
+          "Take a look through our curated collection of vehicles. Whether you need efficiency, space, or a bit of luxury, your perfect match is waiting for you right here in our fleet.",
+      },
+      {
+        number: "02",
+        title: "Secure Your Dates Online",
+        description:
+          "Once you’ve made your choice, our simple booking process makes it a breeze to lock in your rental. Just pick your dates, provide a few details, and your car will be reserved just for you.",
+      },
+      {
+        number: "03",
+        title: "Start Your Adventure",
+        description:
+          "Come see us to pick up your keys! Our friendly team will get you checked in quickly so you can start your journey. All that's left to do is enjoy the ride.",
+      },
+    ];
+  
+    return (
+      <section className="relative w-full  overflow-hidden border-t border-b border-gray-900">
+        <div className="grid grid-cols-1 lg:grid-cols-2">
+          <div className="bg-[#F0F5F8] text-gray-900 py-10 lg:py-12 px-6 md:px-8 lg:pl-12 xl:pl-16 lg:pr-6 flex flex-col">
+            <h2 className="text-3xl lg:text-4xl font-bold mb-8 text-center ">
+              How It Works
+            </h2>
+            <div className="space-y-8">
+              {steps.map((s) => (
+                <div key={s.number} className="flex items-start">
+                  <span className="text-4xl font-bold leading-none mr-4 w-12">{s.number}</span>
+                  <div>
+                    <h3 className="text-lg mt-3 lg:text-xl font-semibold mb-1">{s.title}</h3>
+                    <p className="text-gray-900 leading-snug">{s.description}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+  
+          <div className="relative h-96 lg:h-auto">
+            <img
+              src={aboutcra}
+              alt="Car side mirror"
+              className="absolute top-0 right-0 w-full h-full object-cover"
+            />
           </div>
         </div>
-
-        <div className="relative">
-          <img src={aboutcra} alt="Car side mirror" className="absolute top-0 right-0 w-full h-full object-cover" />
-        </div>
-      </div>
-    </section>
-  )
-}
+      </section>
+    );
+  };
 
 const CarCard = ({ car, onRentClick, onOpenDetails }) => {
   const [variantStats, setVariantStats] = useState({
@@ -1328,14 +1336,17 @@ const CarCard = ({ car, onRentClick, onOpenDetails }) => {
       </div>
 
       {/* Content */}
-      <div className="p-5">
-  <h3 className="text-lg font-bold text-gray-900 mb-2 truncate">
-    {car.make} {car.model}{" "}
-    <span className="text-gray-500">({car.year})</span>
-  </h3>
+      <div className="p-4">
+      <h3 className="text-xl font-bold text-gray-900 mb-1 truncate">
+        {car.model}
+      </h3>
+      <p className="text-m text-gray-600 truncate">
+        {car.make} • {car.year}
+      </p>
+
 
   {/* Stats */}
-      <div className="flex items-center justify-between mb-4 text-xs text-gray-700">
+      <div className="flex items-center justify-between mt-3 mb-4 text-xs text-gray-700">
         <div className="flex items-center gap-1">
           <IoSpeedometerOutline className="h-4 w-4 text-gray-500" />
           <span>
@@ -1420,215 +1431,226 @@ const CarCard = ({ car, onRentClick, onOpenDetails }) => {
     </div>
   )
 }
-
 /* ===========================
-   Fleet Section
+   Fleet Section - UPDATED VERSION
    =========================== */
  
-const FleetSection = ({ onRentClick, onOpenDetails }) => {
-  const [categories, setCategories] = useState(["All"]) // Start with just "All"
-  const [vehicles, setVehicles] = useState([])
-  const [filteredVehicles, setFilteredVehicles] = useState([])
-  const [activeCategory, setActiveCategory] = useState("All")
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const fetchCategories = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("vehicles")
-        .select("type")
-        .not("type", "is", null) // Exclude null types
-      
-      if (error) throw error
-      
-      // Extract unique types and add "All" at the beginning
-      const uniqueTypes = [...new Set(data.map(vehicle => vehicle.type))]
-      setCategories(["All", ...uniqueTypes])
-    } catch (err) {
-      console.error("Error fetching categories:", err)
-      // Fallback to default categories if fetch fails
-      setCategories(["All", "Sedan", "SUV", "Luxury"])
-    }
-  }
-  useEffect(() => {
-    const fetchData = async () => {
-      await fetchCategories() // Add this line
-      fetchVehicles() // Your existing function
-    }
-    fetchData()
-  }, [])
-
-  useEffect(() => {
+   const FleetSection = ({ onRentClick, onOpenDetails }) => {
+    const navigate = useNavigate();
+    const [categories, setCategories] = useState(["All"]);
+    const [vehicles, setVehicles] = useState([]);
+    const [filteredVehicles, setFilteredVehicles] = useState([]);
+    const [activeCategory, setActiveCategory] = useState("All");
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [menuOpen, setMenuOpen] = useState(false);
+  
+    const fetchCategories = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("vehicles")
+          .select("type")
+          .not("type", "is", null);
+        
+        if (error) throw error;
+        
+        const uniqueTypes = [...new Set(data.map(vehicle => vehicle.type))];
+        setCategories(["All", ...uniqueTypes]);
+      } catch (err) {
+        console.error("Error fetching categories:", err);
+        setCategories(["All", "Sedan", "SUV", "Luxury"]);
+      }
+    };
+  
+    useEffect(() => {
+      const fetchData = async () => {
+        await fetchCategories();
+        fetchVehicles();
+      };
+      fetchData();
+    }, []);
+  
     const fetchVehicles = async () => {
       try {
-        setLoading(true)
+        setLoading(true);
         const { data, error } = await supabase
           .from("vehicles")
           .select(`
             *,
             vehicle_variants ( available_quantity )
           `)
-          .order("created_at", { ascending: false })
-        if (error) throw error
-
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+  
         const enriched = (data || []).map((v) => {
-          const variants = v.vehicle_variants || []
+          const variants = v.vehicle_variants || [];
           const totalAvailable = variants.reduce(
             (sum, vv) => sum + (vv.available_quantity || 0),
             0
-          )
+          );
           return {
             ...v,
             available: totalAvailable > 0,
             available_quantity: totalAvailable,
             total_quantity: variants.length,
-          }
-        })
-
-        setVehicles(enriched)
-        setFilteredVehicles(enriched)
+          };
+        });
+  
+        setVehicles(enriched);
+        setFilteredVehicles(enriched);
       } catch (err) {
-        setError(err.message)
+        setError(err.message);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
-    fetchVehicles()
-  }, [])
-
-  const handleCategoryClick = (category) => {
-    setActiveCategory(category)
-    setMenuOpen(false) // close menu after selecting
-    if (category === "All") {
-      setFilteredVehicles(vehicles)
-    } else {
-      setFilteredVehicles(vehicles.filter((v) => v.type === category))
-    }
-  }
-
-  return (
-    <section className="py-20 mt-10 bg-[#F0F5F8]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
-            Explore Our Fleet
-          </h2>
-          <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            Find the perfect car for your needs with our special rental offers.
-            We provide a wide selection of vehicles, easy booking, and
-            exceptional value for your next journey.
-          </p>
-        </div>
-
-        {/* 🆕 Category Tabs */}
-        <div className="mb-12 relative max-w-4xl mx-auto">
-          {/* Left Arrow */}
-          <button
-            onClick={() => {
-              document.getElementById("categoryScroll").scrollBy({ left: -250, behavior: "smooth" })
-            }}
-            className="hidden md:flex absolute  top-1/2 -translate-y-1/2 bg-white shadow-md p-2 rounded-full hover:bg-gray-100 z-10"
-          >
-            <ChevronLeft className="w-5 h-5 text-gray-600" />
-          </button>
-
-          {/* Category List (centered + scrollable) */}
-          <div
-            id="categoryScroll"
-            className="hidden md:flex overflow-x-hidden gap-10 px-15 justify-center scroll-smooth"
-            style={{ scrollBehavior: "smooth" }}
-          >
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => handleCategoryClick(cat)}
-                className={`pb-2 font-semibold text-lg whitespace-nowrap relative ${
-                  activeCategory === cat ? "text-black" : "text-gray-500"
-                }`}
-              >
-                {cat}
-                {activeCategory === cat && (
-                  <span className="absolute left-0 bottom-0 w-full h-[2px] bg-black rounded"></span>
-                )}
-              </button>
-            ))}
+    };
+  
+    const handleCategoryClick = (category) => {
+      setActiveCategory(category);
+      setMenuOpen(false);
+      if (category === "All") {
+        setFilteredVehicles(vehicles);
+      } else {
+        setFilteredVehicles(vehicles.filter((v) => v.type === category));
+      }
+    };
+  
+    return (
+      <section className="py-20 mt-10 bg-[#F0F5F8]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
+              Explore Our Fleet
+            </h2>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
+              Find the perfect car for your needs with our special rental offers.
+              We provide a wide selection of vehicles, easy booking, and
+              exceptional value for your next journey.
+            </p>
           </div>
-
-          {/* Right Arrow */}
-          <button
-            onClick={() => {
-              document.getElementById("categoryScroll").scrollBy({ left: 250, behavior: "smooth" })
-            }}
-            className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 bg-gray-50 shadow-md p-2 rounded-full hover:bg-gray-100 z-10"
-          >
-            <ChevronRight className="w-5 h-5 text-gray-600" />
-          </button>
-
-
-          {/* Mobile Burger */}
-          <div className="md:hidden flex ">
+  
+          {/* Category Tabs */}
+          <div className="mb-12 relative max-w-4xl mx-auto">
+            {/* Left Arrow */}
             <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="flex items-center gap-2 bg-gray-50 shadow px-4 py-2 rounded-lg"
+              onClick={() => {
+                document.getElementById("categoryScroll").scrollBy({ left: -250, behavior: "smooth" })
+              }}
+              className="hidden md:flex absolute top-1/2 -translate-y-1/2 bg-white shadow-md p-2 rounded-full hover:bg-gray-100 z-10"
             >
-              {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-              <span className="font-semibold">{activeCategory}</span>
+              <ChevronLeft className="w-5 h-5 text-gray-600" />
             </button>
-          </div>
-
-          {/* Mobile Dropdown */}
-          {menuOpen && (
-            <div className="md:hidden mt-4 bg-white shadow-lg rounded-lg p-4 space-y-2 text-center">
+  
+            {/* Category List (centered + scrollable) */}
+            <div
+              id="categoryScroll"
+              className="hidden md:flex overflow-x-hidden gap-10 px-15 justify-center scroll-smooth"
+              style={{ scrollBehavior: "smooth" }}
+            >
               {categories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => handleCategoryClick(cat)}
-                  className={`block w-full py-2 font-semibold rounded ${
-                    activeCategory === cat
-                      ? "bg-black text-white"
-                      : "text-gray-600 hover:bg-gray-100"
+                  className={`pb-2 font-semibold text-lg whitespace-nowrap relative ${
+                    activeCategory === cat ? "text-black" : "text-gray-500"
                   }`}
                 >
                   {cat}
+                  {activeCategory === cat && (
+                    <span className="absolute left-0 bottom-0 w-full h-[2px] bg-black rounded"></span>
+                  )}
                 </button>
               ))}
             </div>
+  
+            {/* Right Arrow */}
+            <button
+              onClick={() => {
+                document.getElementById("categoryScroll").scrollBy({ left: 250, behavior: "smooth" })
+              }}
+              className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 bg-gray-50 shadow-md p-2 rounded-full hover:bg-gray-100 z-10"
+            >
+              <ChevronRight className="w-5 h-5 text-gray-600" />
+            </button>
+  
+            {/* Mobile Burger */}
+            <div className="md:hidden flex">
+              <button
+                onClick={() => setMenuOpen(!menuOpen)}
+                className="flex items-center gap-2 bg-gray-50 shadow px-4 py-2 rounded-lg"
+              >
+                {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                <span className="font-semibold">{activeCategory}</span>
+              </button>
+            </div>
+  
+            {/* Mobile Dropdown */}
+            {menuOpen && (
+              <div className="md:hidden mt-4 bg-white shadow-lg rounded-lg p-4 space-y-2 text-center">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => handleCategoryClick(cat)}
+                    className={`block w-full py-2 font-semibold rounded ${
+                      activeCategory === cat
+                        ? "bg-black text-white"
+                        : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+  
+          {loading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="text-lg text-gray-600">Loading vehicles...</div>
+            </div>
+          ) : error ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="text-lg text-red-600">
+                Error loading vehicles: {error}
+              </div>
+            </div>
+          ) : filteredVehicles.length === 0 ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="text-lg text-gray-600">
+                No vehicles available in this category.
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 place-items-center">
+                {filteredVehicles.slice(0, 6).map((vehicle) => (
+                  <CarCard
+                    key={vehicle.id}
+                    car={vehicle}
+                    onRentClick={onRentClick}
+                    onOpenDetails={onOpenDetails}
+                  />
+                ))}
+              </div>
+  
+              {/* See More Button - Always show if there are any vehicles */}
+              {filteredVehicles.length > 0 && (
+                <div className="flex justify-center mt-8">
+                  <button
+                    onClick={() => navigate('/cars')}
+                    className="bg-[#101010] text-gray-50 px-6 py-3 rounded-full font-medium text-sm hover:bg-gray-800 transition-all duration-300 transform hover:scale-105 shadow-md"
+                  >
+                    See More Cars
+                  </button>
+                </div>
+              )}
+
+            </>
           )}
         </div>
-
-        {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <div className="text-lg text-gray-600">Loading vehicles...</div>
-          </div>
-        ) : error ? (
-          <div className="flex justify-center items-center py-20">
-            <div className="text-lg text-red-600">
-              Error loading vehicles: {error}
-            </div>
-          </div>
-        ) : filteredVehicles.length === 0 ? (
-          <div className="flex justify-center items-center py-20">
-            <div className="text-lg text-gray-600">
-              No vehicles available in this category.
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 place-items-center">
-            {filteredVehicles.map((vehicle) => (
-              <CarCard
-                key={vehicle.id}
-                car={vehicle}
-                onRentClick={onRentClick}
-                onOpenDetails={onOpenDetails}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
-  )
-}
+      </section>
+    );
+  };
 const FAQs = () => {
   const [openIndex, setOpenIndex] = useState(null)
 
@@ -1952,33 +1974,34 @@ const FAQs = () => {
           }}
         />
   
-        <div ref={heroRef}>
+        <div ref={heroRef} id="home">
           <HeroSection />
         </div>
-        <div ref={aboutRef}>
-        <AboutSection />
-        <div ref={whyChooseUsRef}>
-          <WhyChooseUs />
+        
+        <div ref={aboutRef} id="about">
+          <AboutSection />
+          <div ref={whyChooseUsRef}>
+            <WhyChooseUs />
+          </div>
         </div>
-        </div>
+        
         <HowItWorks />
-        <div ref={fleetRef}>
+        
+        <div ref={fleetRef} id="cars">
           <FleetSection
-            onOpenDetails={handleOpenDetails} // 👈 pass handler
-            onRentClick={handleRentClick} // still pass, in case you also use buttons
+            onOpenDetails={handleOpenDetails}
+            onRentClick={handleRentClick}
           />
         </div>
   
-        {/* Details Modal */}
         <DetailsModal
           isOpen={isDetailsOpen}
           onClose={() => setIsDetailsOpen(false)}
           car={selectedCar}
-          onRentClick={handleRentClick} // 👈 rent from inside details
+          onRentClick={handleRentClick}
         />
         <RentalBot />
   
-        {/* Rental Modal (form) */}
         <RentalModal
           isOpen={isRentalOpen}
           onClose={() => setIsRentalOpen(false)}
@@ -1986,19 +2009,18 @@ const FAQs = () => {
           selectedVariant={selectedVariant}
         />
   
-        <div ref={faqRef}>
+        <div ref={faqRef} id="faqs">
           <FAQs />
         </div>
-        <div ref={contactRef}>
+        
+        <div ref={contactRef} id="contact">
           <ContactUs />
         </div>
   
-        {/* Footer Section */}
         <div ref={FooterRef}>
           <Footer />
         </div>
   
-        {/* lil util for toast animation */}
         <style>{`
           @keyframes slide-in {
             from { transform: translateX(100%); opacity: 0; }

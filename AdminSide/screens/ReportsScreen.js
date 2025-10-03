@@ -164,7 +164,7 @@ export default function BookingsAnalyticsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <FlatList
         data={bookings}
         keyExtractor={(item) => item.id}
@@ -179,7 +179,7 @@ export default function BookingsAnalyticsScreen() {
             {/* Stats Cards */}
             <View style={styles.statsContainer}>
               <View style={styles.statCard}>
-                <Ionicons name="car-outline" size={28} color="#222" style={styles.statIcon} />
+                <Ionicons name="car" size={28} color="#222" style={styles.statIcon} />
                 <Text style={styles.statValue}>{stats.totalBookings}</Text>
                 <Text style={styles.statLabel}>Total Bookings</Text>
               </View>
@@ -198,7 +198,7 @@ export default function BookingsAnalyticsScreen() {
                 <Text style={styles.statLabel}>Avg Booking Value</Text>
               </View>
               <View style={styles.statCard}>
-                <Ionicons name="checkmark-done-outline" size={28} color="#10b981" style={styles.statIcon} />
+                <Ionicons name="checkmark-done-outline" size={28} color="#222" style={styles.statIcon} />
                 <Text style={styles.statValue}>{stats.completedBookings}</Text>
                 <Text style={styles.statLabel}>Completed</Text>
               </View>
@@ -219,14 +219,14 @@ export default function BookingsAnalyticsScreen() {
       
         
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#fcfcfc',
     paddingHorizontal: 16,
     paddingTop: 8,
   },
@@ -243,6 +243,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 25,
     marginBottom: 24,
     marginTop: 8,
   },
@@ -254,7 +255,12 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     gap: 16,
-    marginBottom: 24,
+    marginBottom: 8,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
   },
   statCard: {
     backgroundColor: 'white',
@@ -273,14 +279,14 @@ const styles = StyleSheet.create({
     elevation: 5,
     alignItems: 'center',
   },
-  statIcon: {
+  statIconContainer: {
     marginBottom: 8,
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '800',
+    color: '#111827',
     marginBottom: 4,
-    textAlign: 'center',
   },
   statLabel: {
     color: '#374151',

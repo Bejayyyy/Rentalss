@@ -1,6 +1,6 @@
 "use client"
 
-import { useState ,useEffect} from "react"
+import { useState, useEffect } from "react"
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   Switch,
   Platform,
   Dimensions,
+  Modal,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import * as ImagePicker from "expo-image-picker"
@@ -42,19 +43,25 @@ export default function AddVehicleScreen({ navigation, route }) {
     available: editingVehicle?.available ?? true,
   })
 
+  // Car Owner states
+  const [carOwners, setCarOwners] = useState([]);
+  const [selectedOwnerId, setSelectedOwnerId] = useState(null);
+  const [ownerDropdownVisible, setOwnerDropdownVisible] = useState(false);
+
   const [feedbackModal, setFeedbackModal] = useState({
     visible: false,
     type: "success", 
     message: ""
   })
+  
   const handleFeedbackModalClose = () => {
     setFeedbackModal({ visible: false, type: "success", message: "" })
     
-    // Navigate back only on success
     if (feedbackModal.type === "success") {
       navigation.goBack()
     }
   }
+
   // Color variants state
   const [colorVariants, setColorVariants] = useState([
     {
@@ -75,6 +82,35 @@ export default function AddVehicleScreen({ navigation, route }) {
   const [variantToDelete, setVariantToDelete] = useState(null)
 
   const vehicleTypes = ["Sedan", "SUV", "Hatchback", "Convertible", "Truck", "Van", "Luxury"]
+
+  // Fetch car owners
+  useEffect(() => {
+    fetchCarOwners();
+  }, []);
+
+  const fetchCarOwners = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('car_owners')
+        .select('*')
+        .eq('status', 'active')
+        .order('name');
+
+      if (error) {
+        console.error('Error fetching car owners:', error);
+        return;
+      }
+
+      setCarOwners(data || []);
+      
+      // If editing and vehicle has owner, select it
+      if (editingVehicle?.owner_id) {
+        setSelectedOwnerId(editingVehicle.owner_id);
+      }
+    } catch (error) {
+      console.error('Error in fetchCarOwners:', error);
+    }
+  };
 
   // Load existing variants when editing
   useEffect(() => {
@@ -166,69 +202,64 @@ export default function AddVehicleScreen({ navigation, route }) {
     }
   }
 
-// Fixed uploadImage function - replace your existing one with this
-const uploadImage = async (uri) => {
-  if (!uri) return null;
+  const uploadImage = async (uri) => {
+    if (!uri) return null;
 
-  try {
-    let processedUri = uri;
+    try {
+      let processedUri = uri;
 
-    // Convert HEIC → JPEG on iOS if needed
-    if (uri.toLowerCase().endsWith(".heic")) {
-      const manipResult = await ImageManipulator.manipulateAsync(
-        uri,
-        [],
-        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
-      );
-      processedUri = manipResult.uri;
-    }
+      if (uri.toLowerCase().endsWith(".heic")) {
+        const manipResult = await ImageManipulator.manipulateAsync(
+          uri,
+          [],
+          { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        processedUri = manipResult.uri;
+      }
 
-    const fileExt = processedUri.split(".").pop()?.toLowerCase() || "jpg";
-    const safeExt = fileExt === "heic" ? "jpg" : fileExt;
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${safeExt}`;
-    const filePath = `vehicle-variants/${fileName}`;
-    const contentType = `image/${safeExt === "jpg" ? "jpeg" : safeExt}`;
+      const fileExt = processedUri.split(".").pop()?.toLowerCase() || "jpg";
+      const safeExt = fileExt === "heic" ? "jpg" : fileExt;
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${safeExt}`;
+      const filePath = `vehicle-variants/${fileName}`;
+      const contentType = `image/${safeExt === "jpg" ? "jpeg" : safeExt}`;
 
-    let fileData;
+      let fileData;
 
-    if (Platform.OS === "web") {
-      // Web: fetch blob directly
-      const response = await fetch(processedUri);
-      if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
-      fileData = await response.blob();
+      if (Platform.OS === "web") {
+        const response = await fetch(processedUri);
+        if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
+        fileData = await response.blob();
 
-      const { error } = await supabase.storage
-        .from("vehicle-images")
-        .upload(filePath, fileData, { contentType, upsert: false });
+        const { error } = await supabase.storage
+          .from("vehicle-images")
+          .upload(filePath, fileData, { contentType, upsert: false });
 
-      if (error) throw error;
-    } else {
-      // Native: read as base64 string, then convert to ArrayBuffer
-      const base64Data = await FileSystem.readAsStringAsync(processedUri, {
-        encoding: "base64", // Use string instead of FileSystem.EncodingType.Base64
-      });
-
-      const { error } = await supabase.storage
-        .from("vehicle-images")
-        .upload(filePath, decode(base64Data), {
-          contentType,
-          upsert: false,
+        if (error) throw error;
+      } else {
+        const base64Data = await FileSystem.readAsStringAsync(processedUri, {
+          encoding: "base64",
         });
 
-      if (error) throw error;
+        const { error } = await supabase.storage
+          .from("vehicle-images")
+          .upload(filePath, decode(base64Data), {
+            contentType,
+            upsert: false,
+          });
+
+        if (error) throw error;
+      }
+
+      const { data: publicData } = supabase.storage
+        .from("vehicle-images")
+        .getPublicUrl(filePath);
+
+      return publicData.publicUrl;
+    } catch (err) {
+      console.error("Upload error:", err);
+      throw err;
     }
-
-    // Return public URL
-    const { data: publicData } = supabase.storage
-      .from("vehicle-images")
-      .getPublicUrl(filePath);
-
-    return publicData.publicUrl;
-  } catch (err) {
-    console.error("Upload error:", err);
-    throw err;
-  }
-};
+  };
 
   const validateForm = () => {
     if (!formData.make || !formData.model || !formData.year || !formData.pricePerDay || !formData.seats) {
@@ -241,7 +272,6 @@ const uploadImage = async (uri) => {
       return false
     }
 
-    // Validate color variants
     const validVariants = colorVariants.filter(variant => variant.color.trim() !== "")
     
     if (validVariants.length === 0) {
@@ -273,10 +303,8 @@ const uploadImage = async (uri) => {
     setLoading(true)
   
     try {
-      // Get valid variants
       const validVariants = colorVariants.filter(variant => variant.color.trim() !== "")
   
-      // Upload images for variants
       const variantsWithImages = await Promise.all(
         validVariants.map(async (variant) => {
           let imageUrl = variant.imageUrl
@@ -286,7 +314,6 @@ const uploadImage = async (uri) => {
               imageUrl = await uploadImage(variant.imageUri)
             } catch (uploadError) {
               console.error('Image upload failed for variant:', variant.color, uploadError)
-              // Continue without image for this variant
             }
           }
   
@@ -297,7 +324,6 @@ const uploadImage = async (uri) => {
         })
       )
   
-      // Calculate total quantities across all variants
       const totalQuantity = variantsWithImages.reduce((sum, variant) => 
         sum + Number.parseInt(variant.totalQuantity), 0)
       const availableQuantity = variantsWithImages.reduce((sum, variant) => 
@@ -315,14 +341,14 @@ const uploadImage = async (uri) => {
         available: formData.available,
         total_quantity: totalQuantity,
         available_quantity: availableQuantity,
-        image_url: variantsWithImages[0]?.imageUrl || null, // Use first variant's image as main image
+        image_url: variantsWithImages[0]?.imageUrl || null,
+        owner_id: selectedOwnerId,
         updated_at: new Date().toISOString(),
       }
   
       let vehicleId = editingVehicle?.id
   
       if (isEditing) {
-        // Update existing vehicle
         const { error } = await supabase
           .from('vehicles')
           .update(vehicleData)
@@ -333,13 +359,11 @@ const uploadImage = async (uri) => {
           throw error
         }
   
-        // Delete existing variants
         await supabase
           .from('vehicle_variants')
           .delete()
           .eq('vehicle_id', editingVehicle.id)
       } else { 
-        // Create new vehicle
         vehicleData.created_at = new Date().toISOString()
         
         const { data: newVehicle, error } = await supabase
@@ -356,7 +380,6 @@ const uploadImage = async (uri) => {
         vehicleId = newVehicle.id
       }
   
-      // Insert variants
       const variantInserts = variantsWithImages.map(variant => ({
         vehicle_id: vehicleId,
         color: variant.color,
@@ -376,7 +399,6 @@ const uploadImage = async (uri) => {
         throw variantError
       }
   
-      // Show success modal instead of Alert
       setFeedbackModal({
         visible: true,
         type: "success",
@@ -386,7 +408,6 @@ const uploadImage = async (uri) => {
     } catch (error) {
       console.error("Error saving vehicle:", error)
       
-      // Show error modal instead of Alert
       setFeedbackModal({
         visible: true,
         type: "error",
@@ -396,7 +417,6 @@ const uploadImage = async (uri) => {
       setLoading(false)
     }
   }
-  
 
   const renderTypeSelector = () => (
     <View style={styles.typeSelector}>
@@ -415,6 +435,95 @@ const uploadImage = async (uri) => {
     </View>
   )
 
+  const renderOwnerSelector = () => (
+    <View style={styles.card}>
+      <View style={styles.sectionHeader}>
+        <Ionicons name="person" size={20} color="#222" />
+        <Text style={styles.sectionTitle}>Vehicle Owner</Text>
+      </View>
+      <Text style={styles.sectionSubtitle}>Select the owner of this vehicle</Text>
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Owner *</Text>
+        <TouchableOpacity
+          style={styles.ownerSelector}
+          onPress={() => setOwnerDropdownVisible(true)}
+        >
+          <View style={styles.ownerSelectorContent}>
+            <Ionicons name="person-circle" size={20} color="#6b7280" />
+            <Text style={[styles.ownerSelectorText, !selectedOwnerId && styles.placeholderText]}>
+              {selectedOwnerId 
+                ? carOwners.find(o => o.id === selectedOwnerId)?.name || 'Select vehicle owner'
+                : 'Select vehicle owner'
+              }
+            </Text>
+          </View>
+          <Ionicons name="chevron-down" size={20} color="#6b7280" />
+        </TouchableOpacity>
+      </View>
+
+      <Modal
+        visible={ownerDropdownVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOwnerDropdownVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setOwnerDropdownVisible(false)}
+        >
+          <View style={styles.ownerPickerContainer}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Select Vehicle Owner</Text>
+              <TouchableOpacity onPress={() => setOwnerDropdownVisible(false)}>
+                <Ionicons name="close" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 400 }}>
+  {carOwners.map(owner => (
+    <TouchableOpacity
+      key={owner.id}
+      style={[
+        styles.ownerPickerItem,
+        selectedOwnerId === owner.id && styles.ownerPickerItemSelected
+      ]}
+      onPress={() => {
+        setSelectedOwnerId(owner.id);
+        setOwnerDropdownVisible(false);
+      }}
+    >
+      <View style={styles.ownerPickerItemContent}>
+        <View style={styles.ownerAvatar}>
+          <Text style={styles.ownerAvatarText}>
+            {owner.name.charAt(0).toUpperCase()}
+          </Text>
+        </View>
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={styles.ownerPickerText}>{owner.name}</Text>
+          <Text style={styles.ownerPickerSubtext}>{owner.email}</Text>
+        </View>
+      </View>
+      {selectedOwnerId === owner.id && (
+        <Ionicons name="checkmark-circle" size={24} color="#3b82f6" />
+      )}
+    </TouchableOpacity>
+  ))}
+
+  {carOwners.length === 0 && (
+    <Text style={styles.emptyOwnerText}>
+      No car owners found. Add owners in Car Owners section.
+    </Text>
+  )}
+</ScrollView>
+
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
+
   const renderColorVariant = (variant, index) => (
     <View key={variant.id} style={styles.variantCard}>
       <View style={styles.variantHeader}>
@@ -429,7 +538,6 @@ const uploadImage = async (uri) => {
         )}
       </View>
 
-      {/* Color and Image Row */}
       <View style={[styles.inputRow, isWeb && styles.inputRowWeb]}>
         <View style={[styles.inputGroup, { flex: 2 }]}>
           <Text style={styles.label}>Color Name *</Text>
@@ -459,7 +567,6 @@ const uploadImage = async (uri) => {
         </View>
       </View>
 
-      {/* Quantity Row */}
       <View style={[styles.inputRow, isWeb && styles.inputRowWeb]}>
         <View style={[styles.inputGroup, styles.inputHalf]}>
           <Text style={styles.label}>Total Quantity *</Text>
@@ -468,7 +575,6 @@ const uploadImage = async (uri) => {
             value={variant.totalQuantity}
             onChangeText={(text) => {
               updateColorVariant(variant.id, 'totalQuantity', text)
-              // Auto-adjust available quantity if it exceeds total
               if (Number.parseInt(text) < Number.parseInt(variant.availableQuantity)) {
                 updateColorVariant(variant.id, 'availableQuantity', text)
               }
@@ -495,17 +601,17 @@ const uploadImage = async (uri) => {
   )
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      {/* Feedback Modal */}
-    <ActionModal
-      visible={feedbackModal.visible}
-      type={feedbackModal.type}
-      title={feedbackModal.type === "success" ? "Success" : "Error"}
-      message={feedbackModal.message}
-      confirmText="OK"
-      onClose={handleFeedbackModalClose}
-      onConfirm={handleFeedbackModalClose}
-    />
+    <View style={styles.safeArea}>
+      <ActionModal
+        visible={feedbackModal.visible}
+        type={feedbackModal.type}
+        title={feedbackModal.type === "success" ? "Success" : "Error"}
+        message={feedbackModal.message}
+        confirmText="OK"
+        onClose={handleFeedbackModalClose}
+        onConfirm={handleFeedbackModalClose}
+      />
+      
       <ScrollView
         style={styles.container}
         contentContainerStyle={[
@@ -516,17 +622,13 @@ const uploadImage = async (uri) => {
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={28} color="#222" />
-          </TouchableOpacity>
+       
           <Text style={styles.headerTitle}>{isEditing ? 'Edit Vehicle' : 'Add Vehicle'}</Text>
           <View style={styles.headerSpacer} />
         </View>
 
         <View style={[styles.form, isWeb && styles.formWeb]}>
-          {/* Basic Information */}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Basic Information</Text>
 
@@ -583,7 +685,6 @@ const uploadImage = async (uri) => {
             {renderTypeSelector()}
           </View>
 
-          {/* Pricing & Details */}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Pricing & Details</Text>
 
@@ -627,7 +728,8 @@ const uploadImage = async (uri) => {
             </View>
           </View>
 
-          {/* Color Variants */}
+          {renderOwnerSelector()}
+
           <View style={styles.card}>
             <View style={styles.variantsHeader}>
               <View style={styles.variantsHeaderContent}>
@@ -655,7 +757,6 @@ const uploadImage = async (uri) => {
         </View>
       </ScrollView>
 
-      {/* Confirmation Modal */}
       <ActionModal
         visible={showConfirmModal}
         type="confirm"
@@ -670,7 +771,6 @@ const uploadImage = async (uri) => {
         loading={loading}
       />
 
-      {/* Delete Variant Modal */}
       <ActionModal
         visible={showDeleteVariantModal}
         type="delete"
@@ -683,35 +783,40 @@ const uploadImage = async (uri) => {
         }}
         onConfirm={confirmRemoveVariant}
       />
-    </SafeAreaView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "white",
+    backgroundColor: "#fcfcfc",
   },
   container: {
     flex: 1,
-    backgroundColor: "white",
+    backgroundColor: "#fcfcfc",
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#fcfcfc",
+    paddingHorizontal: 25,
+    marginTop: 24,
+    marginBottom: 24,
+    paddingTop: 16,
   },
-  backButton: {
-    width: 28,
+  headerContent: {
+    flex: 1,
+    backgroundColor: "#fcfcfc",
+
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: '800',
+    fontWeight: "800",
+    color: "#111827",
     letterSpacing: -0.5,
-    color: '#222',
+    marginBottom: 4,
   },
   headerSpacer: {
     width: 28,
@@ -920,4 +1025,120 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.5,
   },
-})
+
+  ownerSelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 48,
+  },
+  ownerSelectorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 8,
+  },
+  ownerSelectorText: {
+    fontSize: 16,
+    color: '#1f2937',
+    fontWeight: '500',
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  ownerPickerContainer: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  ownerPickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 2,
+    borderBottomColor: '#f3f4f6',
+    borderRadius:16,
+  },
+  ownerPickerItemSelected: {
+    backgroundColor: '#f0f9ff',
+  },
+  ownerPickerItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  ownerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#222',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ownerAvatarText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+  rentalBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#10b981',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ownerPickerText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  ownerPickerSubtext: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  emptyOwnerText: {
+    textAlign: 'center',
+    color: '#9ca3af',
+    padding: 20,
+    fontSize: 14,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+}) 
