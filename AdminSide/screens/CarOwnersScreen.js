@@ -418,7 +418,7 @@ export default function CarOwnersScreen({ navigation }) {
                 <Text style={styles.inputLabel}>Phone Number</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="+1 (555) 123-4567"
+                  placeholder=""
                   value={formData.phone}
                   onChangeText={(text) => setFormData({ ...formData, phone: text })}
                   keyboardType="phone-pad"

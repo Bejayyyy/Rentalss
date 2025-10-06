@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -10,7 +11,6 @@ import {
   ScrollView,
   Image,
   Alert,
-  Switch,
   Platform,
   Dimensions,
   Modal,
@@ -18,7 +18,6 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import * as ImagePicker from "expo-image-picker"
 import { supabase } from "../services/supabase"
-import { SafeAreaView } from "react-native-safe-area-context"
 import { decode } from 'base64-arraybuffer'
 import * as FileSystem from 'expo-file-system/legacy'
 import ActionModal from "../components/AlertModal/ActionModal"
@@ -37,16 +36,14 @@ export default function AddVehicleScreen({ navigation, route }) {
     year: editingVehicle?.year?.toString() || "",
     type: editingVehicle?.type || "",
     seats: editingVehicle?.seats?.toString() || "",
-    pricePerDay: editingVehicle?.price_per_day?.toString() || "",
     mileage: editingVehicle?.mileage?.toString() || "",
     description: editingVehicle?.description || "",
     available: editingVehicle?.available ?? true,
   })
 
-  // Car Owner states
   const [carOwners, setCarOwners] = useState([]);
-  const [selectedOwnerId, setSelectedOwnerId] = useState(null);
   const [ownerDropdownVisible, setOwnerDropdownVisible] = useState(false);
+  const [selectedVariantId, setSelectedVariantId] = useState(null);
 
   const [feedbackModal, setFeedbackModal] = useState({
     visible: false,
@@ -62,28 +59,27 @@ export default function AddVehicleScreen({ navigation, route }) {
     }
   }
 
-  // Color variants state
   const [colorVariants, setColorVariants] = useState([
     {
       id: Date.now(),
       color: "",
+      plateNumber: "",
+      pricePerDay: "",
       totalQuantity: "1",
       availableQuantity: "1",
       imageUri: null,
-      imageUrl: null
+      imageUrl: null,
+      ownerId: null
     }
   ])
 
   const [loading, setLoading] = useState(false)
-  
-  // Modal states
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [showDeleteVariantModal, setShowDeleteVariantModal] = useState(false)
   const [variantToDelete, setVariantToDelete] = useState(null)
 
   const vehicleTypes = ["Sedan", "SUV", "Hatchback", "Convertible", "Truck", "Van", "Luxury"]
 
-  // Fetch car owners
   useEffect(() => {
     fetchCarOwners();
   }, []);
@@ -101,18 +97,18 @@ export default function AddVehicleScreen({ navigation, route }) {
         return;
       }
 
-      setCarOwners(data || []);
-      
-      // If editing and vehicle has owner, select it
-      if (editingVehicle?.owner_id) {
-        setSelectedOwnerId(editingVehicle.owner_id);
-      }
+      const sortedOwners = (data || []).sort((a, b) => {
+        if (a.name.toLowerCase() === 'rental den') return -1;
+        if (b.name.toLowerCase() === 'rental den') return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      setCarOwners(sortedOwners);
     } catch (error) {
       console.error('Error in fetchCarOwners:', error);
     }
   };
 
-  // Load existing variants when editing
   useEffect(() => {
     if (isEditing && editingVehicle?.id) {
       loadExistingVariants()
@@ -135,10 +131,13 @@ export default function AddVehicleScreen({ navigation, route }) {
         const formattedVariants = variants.map(variant => ({
           id: variant.id,
           color: variant.color,
+          plateNumber: variant.plate_number || "",
+          pricePerDay: variant.price_per_day?.toString() || "",
           totalQuantity: variant.total_quantity.toString(),
           availableQuantity: variant.available_quantity.toString(),
           imageUri: variant.image_url,
-          imageUrl: variant.image_url
+          imageUrl: variant.image_url,
+          ownerId: variant.owner_id
         }))
         setColorVariants(formattedVariants)
       }
@@ -151,10 +150,13 @@ export default function AddVehicleScreen({ navigation, route }) {
     const newVariant = {
       id: Date.now(),
       color: "",
+      plateNumber: "",
+      pricePerDay: "",
       totalQuantity: "1",
       availableQuantity: "1",
       imageUri: null,
-      imageUrl: null
+      imageUrl: null,
+      ownerId: null
     }
     setColorVariants([...colorVariants, newVariant])
   }
@@ -180,6 +182,19 @@ export default function AddVehicleScreen({ navigation, route }) {
         ? { ...variant, [field]: value }
         : variant
     ))
+  }
+
+  const openOwnerSelector = (variantId) => {
+    setSelectedVariantId(variantId);
+    setOwnerDropdownVisible(true);
+  }
+
+  const selectOwnerForVariant = (ownerId) => {
+    if (selectedVariantId) {
+      updateColorVariant(selectedVariantId, 'ownerId', ownerId);
+    }
+    setOwnerDropdownVisible(false);
+    setSelectedVariantId(null);
   }
 
   const pickImageForVariant = async (variantId) => {
@@ -262,8 +277,8 @@ export default function AddVehicleScreen({ navigation, route }) {
   };
 
   const validateForm = () => {
-    if (!formData.make || !formData.model || !formData.year || !formData.pricePerDay || !formData.seats) {
-      Alert.alert("Error", "Please fill in all required fields")
+    if (!formData.make || !formData.model || !formData.year || !formData.seats) {
+      Alert.alert("Error", "Please fill in all required basic information fields")
       return false
     }
 
@@ -280,6 +295,22 @@ export default function AddVehicleScreen({ navigation, route }) {
     }
 
     for (let variant of validVariants) {
+      if (!variant.plateNumber || variant.plateNumber.trim() === "") {
+        Alert.alert("Error", `Please enter a plate number for ${variant.color || 'variant ' + (validVariants.indexOf(variant) + 1)}`)
+        return false
+      }
+      if (!variant.pricePerDay || variant.pricePerDay.trim() === "") {
+        Alert.alert("Error", `Please enter a price per day for ${variant.color || 'variant ' + (validVariants.indexOf(variant) + 1)}`)
+        return false
+      }
+      if (Number.parseFloat(variant.pricePerDay) <= 0) {
+        Alert.alert("Error", `Price per day for ${variant.color} must be greater than 0`)
+        return false
+      }
+      if (!variant.ownerId) {
+        Alert.alert("Error", `Please select an owner for ${variant.color || 'variant ' + (validVariants.indexOf(variant) + 1)}`)
+        return false
+      }
       if (Number.parseInt(variant.totalQuantity) < 1) {
         Alert.alert("Error", `Total quantity for ${variant.color} must be at least 1`)
         return false
@@ -328,21 +359,22 @@ export default function AddVehicleScreen({ navigation, route }) {
         sum + Number.parseInt(variant.totalQuantity), 0)
       const availableQuantity = variantsWithImages.reduce((sum, variant) => 
         sum + Number.parseInt(variant.availableQuantity), 0)
-  
+      
+      // CRITICAL: Use EXACTLY the first variant's price - no calculations
       const vehicleData = {
         make: formData.make,
         model: formData.model,
         year: Number.parseInt(formData.year),
         type: formData.type,
         seats: Number.parseInt(formData.seats),
-        price_per_day: Number.parseFloat(formData.pricePerDay),
+        price_per_day: Number.parseFloat(variantsWithImages[0]?.pricePerDay || "0"),
         mileage: formData.mileage ? Number.parseInt(formData.mileage) : null,
         description: formData.description,
         available: formData.available,
         total_quantity: totalQuantity,
         available_quantity: availableQuantity,
         image_url: variantsWithImages[0]?.imageUrl || null,
-        owner_id: selectedOwnerId,
+        owner_id: variantsWithImages[0]?.ownerId || null,
         updated_at: new Date().toISOString(),
       }
   
@@ -383,9 +415,12 @@ export default function AddVehicleScreen({ navigation, route }) {
       const variantInserts = variantsWithImages.map(variant => ({
         vehicle_id: vehicleId,
         color: variant.color,
+        plate_number: variant.plateNumber.trim().toUpperCase(),
+        price_per_day: Number.parseFloat(variant.pricePerDay),
         image_url: variant.imageUrl,
         total_quantity: Number.parseInt(variant.totalQuantity),
         available_quantity: Number.parseInt(variant.availableQuantity),
+        owner_id: variant.ownerId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }))
@@ -435,95 +470,6 @@ export default function AddVehicleScreen({ navigation, route }) {
     </View>
   )
 
-  const renderOwnerSelector = () => (
-    <View style={styles.card}>
-      <View style={styles.sectionHeader}>
-        <Ionicons name="person" size={20} color="#222" />
-        <Text style={styles.sectionTitle}>Vehicle Owner</Text>
-      </View>
-      <Text style={styles.sectionSubtitle}>Select the owner of this vehicle</Text>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Owner *</Text>
-        <TouchableOpacity
-          style={styles.ownerSelector}
-          onPress={() => setOwnerDropdownVisible(true)}
-        >
-          <View style={styles.ownerSelectorContent}>
-            <Ionicons name="person-circle" size={20} color="#6b7280" />
-            <Text style={[styles.ownerSelectorText, !selectedOwnerId && styles.placeholderText]}>
-              {selectedOwnerId 
-                ? carOwners.find(o => o.id === selectedOwnerId)?.name || 'Select vehicle owner'
-                : 'Select vehicle owner'
-              }
-            </Text>
-          </View>
-          <Ionicons name="chevron-down" size={20} color="#6b7280" />
-        </TouchableOpacity>
-      </View>
-
-      <Modal
-        visible={ownerDropdownVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setOwnerDropdownVisible(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setOwnerDropdownVisible(false)}
-        >
-          <View style={styles.ownerPickerContainer}>
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Select Vehicle Owner</Text>
-              <TouchableOpacity onPress={() => setOwnerDropdownVisible(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ maxHeight: 400 }}>
-  {carOwners.map(owner => (
-    <TouchableOpacity
-      key={owner.id}
-      style={[
-        styles.ownerPickerItem,
-        selectedOwnerId === owner.id && styles.ownerPickerItemSelected
-      ]}
-      onPress={() => {
-        setSelectedOwnerId(owner.id);
-        setOwnerDropdownVisible(false);
-      }}
-    >
-      <View style={styles.ownerPickerItemContent}>
-        <View style={styles.ownerAvatar}>
-          <Text style={styles.ownerAvatarText}>
-            {owner.name.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={styles.ownerPickerText}>{owner.name}</Text>
-          <Text style={styles.ownerPickerSubtext}>{owner.email}</Text>
-        </View>
-      </View>
-      {selectedOwnerId === owner.id && (
-        <Ionicons name="checkmark-circle" size={24} color="#3b82f6" />
-      )}
-    </TouchableOpacity>
-  ))}
-
-  {carOwners.length === 0 && (
-    <Text style={styles.emptyOwnerText}>
-      No car owners found. Add owners in Car Owners section.
-    </Text>
-  )}
-</ScrollView>
-
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </View>
-  );
-
   const renderColorVariant = (variant, index) => (
     <View key={variant.id} style={styles.variantCard}>
       <View style={styles.variantHeader}>
@@ -565,6 +511,51 @@ export default function AddVehicleScreen({ navigation, route }) {
             )}
           </TouchableOpacity>
         </View>
+      </View>
+
+      <View style={[styles.inputRow, isWeb && styles.inputRowWeb]}>
+        <View style={[styles.inputGroup, styles.inputHalf]}>
+          <Text style={styles.label}>Plate Number *</Text>
+          <TextInput
+            style={styles.input}
+            value={variant.plateNumber}
+            onChangeText={(text) => updateColorVariant(variant.id, 'plateNumber', text.toUpperCase())}
+            placeholder="e.g., ABC-1234"
+            placeholderTextColor="#9ca3af"
+            autoCapitalize="characters"
+          />
+        </View>
+
+        <View style={[styles.inputGroup, styles.inputHalf]}>
+          <Text style={styles.label}>Price per Day ($) *</Text>
+          <TextInput
+            style={styles.input}
+            value={variant.pricePerDay}
+            onChangeText={(text) => updateColorVariant(variant.id, 'pricePerDay', text)}
+            placeholder="e.g., 50.00"
+            placeholderTextColor="#9ca3af"
+            keyboardType="decimal-pad"
+          />
+        </View>
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Owner *</Text>
+        <TouchableOpacity
+          style={styles.ownerSelector}
+          onPress={() => openOwnerSelector(variant.id)}
+        >
+          <View style={styles.ownerSelectorContent}>
+            <Ionicons name="person-circle" size={20} color="#6b7280" />
+            <Text style={[styles.ownerSelectorText, !variant.ownerId && styles.placeholderText]}>
+              {variant.ownerId 
+                ? carOwners.find(o => o.id === variant.ownerId)?.name || 'Select vehicle owner'
+                : 'Select vehicle owner'
+              }
+            </Text>
+          </View>
+          <Ionicons name="chevron-down" size={20} color="#6b7280" />
+        </TouchableOpacity>
       </View>
 
       <View style={[styles.inputRow, isWeb && styles.inputRowWeb]}>
@@ -623,7 +614,6 @@ export default function AddVehicleScreen({ navigation, route }) {
         bounces={false}
       >
         <View style={styles.header}>
-       
           <Text style={styles.headerTitle}>{isEditing ? 'Edit Vehicle' : 'Add Vehicle'}</Text>
           <View style={styles.headerSpacer} />
         </View>
@@ -686,32 +676,19 @@ export default function AddVehicleScreen({ navigation, route }) {
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Pricing & Details</Text>
+            <Text style={styles.sectionTitle}>Additional Details</Text>
+            <Text style={styles.sectionSubtitle}>Optional information about the vehicle</Text>
 
-            <View style={[styles.inputRow, isWeb && styles.inputRowWeb]}>
-              <View style={[styles.inputGroup, styles.inputHalf]}>
-                <Text style={styles.label}>Price per Day ($) *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.pricePerDay}
-                  onChangeText={(text) => setFormData({ ...formData, pricePerDay: text })}
-                  placeholder="e.g., 50.00"
-                  placeholderTextColor="#9ca3af"
-                  keyboardType="decimal-pad"
-                />
-              </View>
-
-              <View style={[styles.inputGroup, styles.inputHalf]}>
-                <Text style={styles.label}>Mileage</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.mileage}
-                  onChangeText={(text) => setFormData({ ...formData, mileage: text })}
-                  placeholder="e.g., 25000"
-                  placeholderTextColor="#9ca3af"
-                  keyboardType="numeric"
-                />
-              </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Mileage</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.mileage}
+                onChangeText={(text) => setFormData({ ...formData, mileage: text })}
+                placeholder="e.g., 25000"
+                placeholderTextColor="#9ca3af"
+                keyboardType="numeric"
+              />
             </View>
 
             <View style={styles.inputGroup}>
@@ -728,13 +705,11 @@ export default function AddVehicleScreen({ navigation, route }) {
             </View>
           </View>
 
-          {renderOwnerSelector()}
-
           <View style={styles.card}>
             <View style={styles.variantsHeader}>
               <View style={styles.variantsHeaderContent}>
-                <Text style={styles.sectionTitle}>Color Variants</Text>
-                <Text style={styles.sectionSubtitle}>Add different color options for this vehicle</Text>
+                <Text style={styles.sectionTitle}>Color Variants & Pricing</Text>
+                <Text style={styles.sectionSubtitle}>Add different color options with individual pricing and owners</Text>
               </View>
               <TouchableOpacity style={styles.addVariantButton} onPress={addColorVariant}>
                 <Ionicons name="add" size={16} color="#222" />
@@ -756,6 +731,62 @@ export default function AddVehicleScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={ownerDropdownVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOwnerDropdownVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setOwnerDropdownVisible(false)}
+        >
+          <View style={styles.ownerPickerContainer}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Select Vehicle Owner</Text>
+              <TouchableOpacity onPress={() => setOwnerDropdownVisible(false)}>
+                <Ionicons name="close" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 400 }}>
+              {carOwners.map(owner => (
+                <TouchableOpacity
+                  key={owner.id}
+                  style={[
+                    styles.ownerPickerItem,
+                    selectedVariantId && colorVariants.find(v => v.id === selectedVariantId)?.ownerId === owner.id && styles.ownerPickerItemSelected
+                  ]}
+                  onPress={() => selectOwnerForVariant(owner.id)}
+                >
+                  <View style={styles.ownerPickerItemContent}>
+                    <View style={styles.ownerAvatar}>
+                      <Text style={styles.ownerAvatarText}>
+                        {owner.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={styles.ownerPickerText}>{owner.name}</Text>
+                      <Text style={styles.ownerPickerSubtext}>{owner.email}</Text>
+                    </View>
+                  </View>
+                  {selectedVariantId && colorVariants.find(v => v.id === selectedVariantId)?.ownerId === owner.id && (
+                    <Ionicons name="checkmark-circle" size={24} color="#222"/>
+                  )}
+                </TouchableOpacity>
+              ))}
+
+              {carOwners.length === 0 && (
+                <Text style={styles.emptyOwnerText}>
+                  No car owners found. Add owners in Car Owners section.
+                </Text>
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <ActionModal
         visible={showConfirmModal}
@@ -809,7 +840,6 @@ const styles = StyleSheet.create({
   headerContent: {
     flex: 1,
     backgroundColor: "#fcfcfc",
-
   },
   headerTitle: {
     fontSize: 28,
@@ -865,6 +895,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
     marginBottom: 16,
+  },
+  helperText: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginBottom: 8,
+    fontStyle: 'italic',
   },
   inputRow: {
     flexDirection: "column",
@@ -929,7 +965,6 @@ const styles = StyleSheet.create({
   selectedTypeButtonText: {
     color: 'white',
   },
-  // Color Variants Styles - Fixed Layout
   variantsHeader: {
     flexDirection: 'column',
     marginBottom: 20,
@@ -1025,7 +1060,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.5,
   },
-
   ownerSelector: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1048,6 +1082,9 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     fontWeight: '500',
     flex: 1,
+  },
+  placeholderText: {
+    color: '#9ca3af',
   },
   modalOverlay: {
     flex: 1,
@@ -1088,10 +1125,10 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 2,
     borderBottomColor: '#f3f4f6',
-    borderRadius:16,
+    borderRadius: 16,
   },
   ownerPickerItemSelected: {
-    backgroundColor: '#f0f9ff',
+    backgroundColor: '#f9fafb'
   },
   ownerPickerItemContent: {
     flexDirection: 'row',
@@ -1110,14 +1147,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
-  },
-  rentalBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#10b981',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   ownerPickerText: {
     fontSize: 16,
@@ -1141,4 +1170,4 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 4,
   },
-}) 
+})

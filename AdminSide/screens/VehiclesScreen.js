@@ -77,7 +77,7 @@ export default function VehiclesScreen({ navigation }) {
     return vehicleVariantsMap[vehicleId] || []
   }, [vehicleVariantsMap])
 
-  // Enhanced filteredVehicles with make filter
+  // Enhanced filteredVehicles with make filter and rented status check
   const filteredVehicles = useMemo(() => {
     let filtered = vehicles
 
@@ -86,12 +86,67 @@ export default function VehiclesScreen({ navigation }) {
       filtered = filtered.filter(vehicle => vehicle.make === selectedMake)
     }
 
-    // Apply status filter
+    // Apply status filter with confirmed bookings check
     if (activeFilter !== "all") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Reset time to start of day for accurate comparison
+
       if (activeFilter === "available") {
-        filtered = filtered.filter(vehicle => vehicle.available)
+        // Show vehicles that are not currently rented (no confirmed bookings for any variant)
+        filtered = filtered.filter(vehicle => {
+          // Get all variants for this vehicle
+          const vehicleVariantIds = vehicleVariants
+            .filter(variant => variant.vehicle_id === vehicle.id)
+            .map(variant => variant.id);
+
+          // Check if any variant has confirmed bookings
+          const hasConfirmedBooking = bookings.some(booking => {
+            if (booking.status !== "confirmed") return false;
+            
+            // Check both vehicle_id and vehicle_variant_id
+            const matchesVehicle = booking.vehicle_id === vehicle.id || 
+                                  vehicleVariantIds.includes(booking.vehicle_variant_id);
+            
+            if (!matchesVehicle) return false;
+
+            const startDate = new Date(booking.rental_start_date);
+            const endDate = new Date(booking.rental_end_date);
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(23, 59, 59, 999);
+
+            return startDate <= today && endDate >= today;
+          });
+
+          return !hasConfirmedBooking;
+        });
       } else if (activeFilter === "rented") {
-        filtered = filtered.filter(vehicle => !vehicle.available)
+        // Show vehicles that are currently rented (have confirmed bookings)
+        filtered = filtered.filter(vehicle => {
+          // Get all variants for this vehicle
+          const vehicleVariantIds = vehicleVariants
+            .filter(variant => variant.vehicle_id === vehicle.id)
+            .map(variant => variant.id);
+
+          // Check if any variant has confirmed bookings
+          const hasConfirmedBooking = bookings.some(booking => {
+            if (booking.status !== "confirmed") return false;
+            
+            // Check both vehicle_id and vehicle_variant_id
+            const matchesVehicle = booking.vehicle_id === vehicle.id || 
+                                  vehicleVariantIds.includes(booking.vehicle_variant_id);
+            
+            if (!matchesVehicle) return false;
+
+            const startDate = new Date(booking.rental_start_date);
+            const endDate = new Date(booking.rental_end_date);
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(23, 59, 59, 999);
+
+            return startDate <= today && endDate >= today;
+          });
+
+          return hasConfirmedBooking;
+        });
       }
     }
 
@@ -125,7 +180,7 @@ export default function VehiclesScreen({ navigation }) {
     }
 
     return filtered
-  }, [vehicles, selectedMake, activeFilter, selectedSeats, selectedType, priceRange])
+  }, [vehicles, selectedMake, activeFilter, selectedSeats, selectedType, priceRange, bookings])
 
   // Paginated vehicles
   const paginatedVehicles = useMemo(() => {
@@ -416,14 +471,14 @@ export default function VehiclesScreen({ navigation }) {
       <View style={styles.vehicleCard}>
          <View style={styles.imageContainer}>
          <ImageBackground
-          source={background} // ✅ correct
+          source={background}
           style={styles.backgroundImage}
           imageStyle={{ borderRadius: 12 }}
         >
       <Image
         source={{ uri: item.image_url || "https://via.placeholder.com/400x240?text=No+Image" }}
         style={styles.vehicleImage}
-        resizeMode="contain" // so car sits nicely "in front"
+        resizeMode="contain"
       />
     </ImageBackground>
   </View>
@@ -776,6 +831,65 @@ export default function VehiclesScreen({ navigation }) {
 
   const renderHeader = () => {
     const stats = getVehicleStats()
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Calculate rented vehicles count
+    const rentedVehiclesCount = vehicles.filter(vehicle => {
+      // Get all variants for this vehicle
+      const vehicleVariantIds = vehicleVariants
+        .filter(variant => variant.vehicle_id === vehicle.id)
+        .map(variant => variant.id);
+
+      // Check if any variant has confirmed bookings
+      const hasConfirmedBooking = bookings.some(booking => {
+        if (booking.status !== "confirmed") return false;
+        
+        // Check both vehicle_id and vehicle_variant_id
+        const matchesVehicle = booking.vehicle_id === vehicle.id || 
+                              vehicleVariantIds.includes(booking.vehicle_variant_id);
+        
+        if (!matchesVehicle) return false;
+
+        const startDate = new Date(booking.rental_start_date);
+        const endDate = new Date(booking.rental_end_date);
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+
+        return startDate <= today && endDate >= today;
+      });
+
+      return hasConfirmedBooking;
+    }).length;
+
+    // Calculate available vehicles count
+    const availableVehiclesCount = vehicles.filter(vehicle => {
+      // Get all variants for this vehicle
+      const vehicleVariantIds = vehicleVariants
+        .filter(variant => variant.vehicle_id === vehicle.id)
+        .map(variant => variant.id);
+
+      // Check if any variant has confirmed bookings
+      const hasConfirmedBooking = bookings.some(booking => {
+        if (booking.status !== "confirmed") return false;
+        
+        // Check both vehicle_id and vehicle_variant_id
+        const matchesVehicle = booking.vehicle_id === vehicle.id || 
+                              vehicleVariantIds.includes(booking.vehicle_variant_id);
+        
+        if (!matchesVehicle) return false;
+
+        const startDate = new Date(booking.rental_start_date);
+        const endDate = new Date(booking.rental_end_date);
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+
+        return startDate <= today && endDate >= today;
+      });
+
+      return !hasConfirmedBooking;
+    }).length;
+
     return (
       <>
         {/* Header with Enhanced Design */}
@@ -1095,8 +1209,8 @@ export default function VehiclesScreen({ navigation }) {
           <View style={styles.filterTabs}>
             {[
               { key: "all", label: "All", count: vehicles.length },
-              { key: "available", label: "Available", count: vehicles.filter(v => v.available).length },
-              { key: "rented", label: "Rented", count: vehicles.filter(v => !v.available).length }
+              { key: "available", label: "Available", count: availableVehiclesCount },
+              { key: "rented", label: "Rented", count: rentedVehiclesCount }
             ].map((filter) => (
               <TouchableOpacity
                 key={filter.key}

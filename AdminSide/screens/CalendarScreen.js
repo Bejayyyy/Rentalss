@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../services/supabase';
 
 const { width } = Dimensions.get('window');
-const CELL_SIZE = (width - 40) / 7; // 7 days in a week, 40px padding
+const CELL_SIZE = (width - 40) / 7;
 
 export default function CalendarComponent({ 
   showHeader = true,
@@ -36,43 +36,68 @@ export default function CalendarComponent({
   const [modalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // NEW STATES for vehicle filter
   const [vehicles, setVehicles] = useState([]);
-  const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [vehicleVariants, setVehicleVariants] = useState([]);
+  const [selectedVariant, setSelectedVariant] = useState(null);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
+
+    // ✅ ADD THIS NEW STATE
+    const [bookingStats, setBookingStats] = useState({
+      pending: 0,
+      confirmed: 0,
+      completed: 0,
+      cancelled: 0,
+      declined: 0,
+      total: 0
+    });
+
   useEffect(() => {
-    fetchVehicles(); // NEW
+    fetchVehicles();
+    fetchVehicleVariants();
     fetchBookings();
     
     const subscription = supabase
       .channel('bookings-calendar-channel')
       .on('postgres_changes', 
         { 
-          event: '*', 
+          event: '*', // Listens to INSERT, UPDATE, and DELETE
           schema: 'public', 
           table: 'bookings' 
         }, 
         (payload) => {
-          console.log('Booking change:', payload);
+          console.log('Booking change detected:', payload.eventType, payload);
+          
+          // Handle different event types
+          switch(payload.eventType) {
+            case 'INSERT':
+              console.log('New booking added');
+              break;
+            case 'UPDATE':
+              console.log('Booking updated');
+              break;
+            case 'DELETE':
+              console.log('Booking deleted:', payload.old);
+              break;
+          }
+          
+          // Refresh bookings data for any change
           fetchBookings();
         }
       )
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(subscription);
     };
   }, []);
 
-  // NEW: Separate useEffect for filter changes
   useEffect(() => {
-    if (vehicles.length > 0 || selectedVehicle === null) {
+    if (vehicleVariants.length > 0 || selectedVariant === null) {
       fetchBookings();
     }
-  }, [selectedVehicle]);
+  }, [selectedVariant]);
 
-  // NEW FUNCTION: Fetch vehicles
   const fetchVehicles = async () => {
     try {
       const { data: vehiclesData, error } = await supabase
@@ -91,12 +116,58 @@ export default function CalendarComponent({
     }
   };
 
-  // ORIGINAL FUNCTION with small modification for filter
+  const fetchVehicleVariants = async () => {
+    try {
+      const { data: variantsData, error } = await supabase
+        .from('vehicle_variants')
+        .select(`
+          *,
+          vehicles (
+            make,
+            model,
+            year
+          )
+        `)
+        .order('vehicle_id', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching vehicle variants:', error);
+        return;
+      }
+
+      setVehicleVariants(variantsData || []);
+    } catch (error) {
+      console.error('Error processing vehicle variants:', error);
+    }
+  };
+
+  // ✅ ADD THIS NEW FUNCTION HERE
+  const calculateBookingStats = (bookingsData) => {
+    const stats = {
+      pending: 0,
+      confirmed: 0,
+      completed: 0,
+      cancelled: 0,
+      declined: 0,
+      total: 0
+    };
+
+    bookingsData?.forEach(booking => {
+      const status = booking.status?.toLowerCase();
+      if (stats.hasOwnProperty(status)) {
+        stats[status]++;
+      }
+      stats.total++;
+    });
+
+    setBookingStats(stats);
+  };
+
+  
   const fetchBookings = async () => {
     try {
       setLoading(true);
       
-      // Build query like your original
       let query = supabase
         .from('bookings')
         .select(`
@@ -106,24 +177,32 @@ export default function CalendarComponent({
             model,
             year,
             image_url
+          ),
+          vehicle_variants (
+            color,
+            plate_number,
+            image_url
           )
         `);
       
-      // NEW: Apply filter only if vehicle is selected
-      if (selectedVehicle) {
-        query = query.eq('vehicle_id', selectedVehicle);
+      if (selectedVariant) {
+        query = query.eq('vehicle_variant_id', selectedVariant);
       }
       
-      // Then order (like your original)
-      const { data: bookingsData, error } = await query.order('rental_start_date', { ascending: true });
+      const { data: bookingsData, error } = await query
+        .order('rental_start_date', { ascending: true });
 
       if (error) {
         console.error('Error fetching bookings:', error);
         Alert.alert('Error', 'Failed to fetch bookings data');
+        setBookings({});
+        setBookingStats({ pending: 0, confirmed: 0, completed: 0, cancelled: 0, declined: 0, total: 0 }); // ✅ ADD THIS
         return;
       }
 
-      // Your original processing logic
+      // ✅ ADD THIS - Calculate statistics before processing
+      calculateBookingStats(bookingsData);
+
       const processedBookings = {};
       
       bookingsData?.forEach((booking) => {
@@ -150,11 +229,14 @@ export default function CalendarComponent({
     } catch (error) {
       console.error('Error processing bookings:', error);
       Alert.alert('Error', 'An error occurred while processing bookings');
+      setBookings({});
+      setBookingStats({ pending: 0, confirmed: 0, completed: 0, cancelled: 0, declined: 0, total: 0 }); // ✅ ADD THIS
     } finally {
       setLoading(false);
     }
   };
 
+  // ✅ AFTER fetchBookings, your other functions continue:
   const getDaysInMonth = (month, year) => {
     return new Date(year, month + 1, 0).getDate();
   };
@@ -168,12 +250,10 @@ export default function CalendarComponent({
     const firstDay = getFirstDayOfMonth(currentMonth, currentYear);
     const days = [];
 
-    // Add empty cells for days before the first day of the month
     for (let i = 0; i < firstDay; i++) {
       days.push({ empty: true, key: `empty-${i}` });
     }
 
-    // Add actual days
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       days.push({
@@ -211,7 +291,7 @@ export default function CalendarComponent({
       case 'confirmed': return '#10b981';
       case 'completed': return '#3b82f6';
       case 'cancelled': return '#ef4444';
-      case 'declined': return '#ff4500';
+      case 'declined': return '#8b5cf6';
       default: return '#6b7280';
     }
   };
@@ -226,27 +306,21 @@ export default function CalendarComponent({
     }
   };
 
-  // NEW FUNCTION: Get background color for a date cell based on bookings
+
   const getCellBackgroundColor = (dayBookings) => {
     if (dayBookings.length === 0) return '#fff';
     
-    // If only one booking, return that status color with opacity
     if (dayBookings.length === 1) {
       const statusColor = getStatusColor(dayBookings[0].status);
-      return statusColor + '20'; // Add 20 for 12.5% opacity (hex)
+      return statusColor + '20';
     }
     
-    // If multiple bookings, use gradient or blend effect
-    // For simplicity, we'll use the first booking's color
     const statusColor = getStatusColor(dayBookings[0].status);
     return statusColor + '20';
   };
 
-  // NEW FUNCTION: Get border color for a date cell (stronger color)
   const getCellBorderColor = (dayBookings) => {
     if (dayBookings.length === 0) return '#e5e7eb';
-    
-    // Use the first booking's status color for the border
     return getStatusColor(dayBookings[0].status);
   };
 
@@ -287,9 +361,8 @@ export default function CalendarComponent({
     }
   };
 
-  // NEW FUNCTION: Handle vehicle selection
-  const handleVehicleSelect = (vehicleId) => {
-    setSelectedVehicle(vehicleId);
+  const handleVariantSelect = (variantId) => {
+    setSelectedVariant(variantId);
     setFilterModalVisible(false);
   };
 
@@ -299,29 +372,42 @@ export default function CalendarComponent({
       onPress={() => handleBookingPress(item)}
       activeOpacity={onBookingSelect ? 0.7 : 1}
     >
-      {/* NEW: Vehicle Image Section */}
-      {item.vehicles?.image_url && (
+      {(item.vehicle_variants?.image_url || item.vehicles?.image_url) && (
         <View style={styles.bookingImageContainer}>
           <Image
-            source={{ uri: item.vehicles.image_url }}
+            source={{ uri: item.vehicle_variants?.image_url || item.vehicles?.image_url }}
             style={styles.bookingVehicleImage}
             resizeMode="cover"
           />
           <View style={styles.vehicleOverlay}>
             <Text style={styles.vehicleName}>
               {item.vehicles.year} {item.vehicles.make} {item.vehicles.model}
+              {item.vehicle_variants?.color && ` - ${item.vehicle_variants.color}`}
             </Text>
+            {item.vehicle_variants?.plate_number && (
+             <View style={styles.plateNumberRow}>
+             <Ionicons name="card" size={14} color="#fff" />
+             <Text style={styles.plateNumberText}>
+               Plate No: {item.vehicle_variants?.plate_number || 'N/A'}
+             </Text>
+           </View>
+           
+            )}
           </View>
         </View>
       )}
 
-      {/* ORIGINAL content wrapped in container */}
-      <View style={styles.bookingContentContainer}>
-        <View style={styles.bookingHeader}>
-          <Text style={styles.customerName}>{item.customer_name}</Text>
-          <View style={[styles.statusBadge, { 
-            backgroundColor: getStatusColor(item.status)
-          }]}>
+        <View style={styles.bookingContentContainer}>
+          <View style={styles.bookingHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="person" size={16} color="#666" />
+              <Text style={styles.customerName}>
+                {item.customer_name}
+              </Text>
+            </View>
+            <View style={[styles.statusBadge, { 
+              backgroundColor: getStatusColor(item.status) 
+            }]}>
             <Ionicons 
               name={getStatusIcon(item.status)} 
               size={12} 
@@ -337,9 +423,10 @@ export default function CalendarComponent({
             <Ionicons name="car" size={16} color="#666" />
             <Text style={styles.detailText}>
               {item.vehicles ? `${item.vehicles.year} ${item.vehicles.make} ${item.vehicles.model}` : 'Vehicle Info Unavailable'}
+              {item.vehicle_variants?.color && ` - ${item.vehicle_variants.color}`}
             </Text>
           </View>
-          
+        
           <View style={styles.detailRow}>
             <Ionicons name="calendar" size={16} color="#666" />
             <Text style={styles.detailText}>
@@ -371,7 +458,7 @@ export default function CalendarComponent({
 
           {item.license_number && (
             <View style={styles.detailRow}>
-              <Ionicons name="card" size={16} color="#666" />
+              <Ionicons name="id-card" size={16} color="#666" />
               <Text style={styles.detailText}>License: {item.license_number}</Text>
             </View>
           )}
@@ -389,11 +476,9 @@ export default function CalendarComponent({
     const isSelected = item.dateStr === selectedDate;
     const hasBookings = item.bookings.length > 0;
     
-    // Get the first booking's vehicle image
     const firstBooking = item.bookings[0];
-    const vehicleImage = firstBooking?.vehicles?.image_url;
+    const vehicleImage = firstBooking?.vehicle_variants?.image_url || firstBooking?.vehicles?.image_url;
 
-    // NEW: Get dynamic colors based on booking status
     const cellBackgroundColor = hasBookings ? getCellBackgroundColor(item.bookings) : '#fff';
     const cellBorderColor = hasBookings ? getCellBorderColor(item.bookings) : '#e5e7eb';
 
@@ -401,9 +486,9 @@ export default function CalendarComponent({
       <TouchableOpacity
         style={[
           styles.dayCell,
-          { backgroundColor: cellBackgroundColor }, // NEW: Dynamic background
-          { borderColor: cellBorderColor }, // NEW: Dynamic border
-          hasBookings && { borderWidth: 1 }, // NEW: Thicker border for booked dates
+          { backgroundColor: cellBackgroundColor },
+          { borderColor: cellBorderColor },
+          hasBookings && { borderWidth: 2 },
           isToday && styles.todayCell,
           isSelected && styles.selectedCell,
         ]}
@@ -462,15 +547,19 @@ export default function CalendarComponent({
             <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
           </View>
           
-          {/* NEW: Vehicle Filter Button */}
           <TouchableOpacity 
             style={styles.filterButton}
             onPress={() => setFilterModalVisible(true)}
           >
             <Ionicons name="car" size={20} color="#222" />
             <Text style={styles.filterButtonText} numberOfLines={1}>
-              {selectedVehicle 
-                ? (vehicles.find(v => v.id === selectedVehicle)?.make || '') + ' ' + (vehicles.find(v => v.id === selectedVehicle)?.model || '')
+              {selectedVariant 
+                ? (() => {
+                    const variant = vehicleVariants.find(v => v.id === selectedVariant);
+                    return variant 
+                      ? `${variant.vehicles?.make || ''} ${variant.vehicles?.model || ''} - ${variant.plate_number || ''}`
+                      : 'All Cars';
+                  })()
                 : 'All Cars'
               }
             </Text>
@@ -478,9 +567,9 @@ export default function CalendarComponent({
           </TouchableOpacity>
         </View>
       )}
+      
 
       <View style={styles.calendarContainer}>
-        {/* Month Navigation */}
         <View style={styles.monthNavigation}>
           <TouchableOpacity onPress={() => changeMonth('prev')} style={styles.navButton}>
             <Ionicons name="chevron-back" size={24} color="#222" />
@@ -495,7 +584,6 @@ export default function CalendarComponent({
           </TouchableOpacity>
         </View>
 
-        {/* Day Headers */}
         <View style={styles.dayHeaders}>
           {dayNames.map((day) => (
             <View key={day} style={styles.dayHeader}>
@@ -504,38 +592,57 @@ export default function CalendarComponent({
           ))}
         </View>
 
-        {/* Calendar Grid */}
         <View style={styles.calendarGrid}>
           {generateCalendarDays().map((day) => renderDay({ item: day }))}
         </View>
       </View>
 
       {showLegend && (
-        <View style={styles.legend}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#f59e0b' }]} />
-            <Text style={styles.legendText}>Pending</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#10b981' }]} />
-            <Text style={styles.legendText}>Confirmed</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
-            <Text style={styles.legendText}>Completed</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
-            <Text style={styles.legendText}>Cancelled</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#ff4500' }]} />
-            <Text style={styles.legendText}>Declined</Text>
-          </View>
+  <View style={styles.legendContainer}>
+    <Text style={styles.legendTitle}>Booking Status</Text>
+    <View style={styles.legend}>
+      <View style={styles.legendItem}>
+        <View style={[styles.legendDot, { backgroundColor: '#f59e0b' }]} />
+        <View style={styles.legendTextContainer}>
+          <Text style={styles.legendText}>Pending</Text>
+          <Text style={styles.legendCount}>{bookingStats.pending}</Text>
         </View>
-      )}
-
-      {/* Day Bookings Modal */}
+      </View>
+      <View style={styles.legendItem}>
+        <View style={[styles.legendDot, { backgroundColor: '#10b981' }]} />
+        <View style={styles.legendTextContainer}>
+          <Text style={styles.legendText}>Confirmed</Text>
+          <Text style={styles.legendCount}>{bookingStats.confirmed}</Text>
+        </View>
+      </View>
+      <View style={styles.legendItem}>
+        <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
+        <View style={styles.legendTextContainer}>
+          <Text style={styles.legendText}>Completed</Text>
+          <Text style={styles.legendCount}>{bookingStats.completed}</Text>
+        </View>
+      </View>
+      <View style={styles.legendItem}>
+        <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
+        <View style={styles.legendTextContainer}>
+          <Text style={styles.legendText}>Cancelled</Text>
+          <Text style={styles.legendCount}>{bookingStats.cancelled}</Text>
+        </View>
+      </View>
+      <View style={styles.legendItem}>
+        <View style={[styles.legendDot, { backgroundColor: '#8b5cf6' }]} />
+        <View style={styles.legendTextContainer}>
+          <Text style={styles.legendText}>Declined</Text>
+          <Text style={styles.legendCount}>{bookingStats.declined}</Text>
+        </View>
+      </View>
+    </View>
+    <View style={styles.totalRow}>
+      <Text style={styles.totalLabel}>Total Bookings:</Text>
+      <Text style={styles.totalValue}>{bookingStats.total}</Text>
+    </View>
+  </View>
+)}
       <Modal
         animationType="slide"
         transparent={true}
@@ -575,7 +682,6 @@ export default function CalendarComponent({
         </View>
       </Modal>
 
-      {/* NEW: Vehicle Filter Modal */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -595,37 +701,35 @@ export default function CalendarComponent({
             </View>
 
             <ScrollView style={styles.vehicleList}>
-              {/* All Cars Option */}
               <TouchableOpacity
                 style={[
                   styles.vehicleOption,
-                  selectedVehicle === null && styles.vehicleOptionSelected
+                  selectedVariant === null && styles.vehicleOptionSelected
                 ]}
-                onPress={() => handleVehicleSelect(null)}
+                onPress={() => handleVariantSelect(null)}
               >
                 <View style={styles.vehicleOptionContent}>
                   <Ionicons name="car" size={24} color="#222" />
                   <Text style={styles.vehicleOptionText}>All Cars</Text>
                 </View>
-                {selectedVehicle === null && (
+                {selectedVariant === null && (
                   <Ionicons name="checkmark-circle" size={24} color="#222" />
                 )}
               </TouchableOpacity>
 
-              {/* Individual Vehicles */}
-              {vehicles.map((vehicle) => (
+              {vehicleVariants.map((variant) => (
                 <TouchableOpacity
-                  key={vehicle.id}
+                  key={variant.id}
                   style={[
                     styles.vehicleOption,
-                    selectedVehicle === vehicle.id && styles.vehicleOptionSelected
+                    selectedVariant === variant.id && styles.vehicleOptionSelected
                   ]}
-                  onPress={() => handleVehicleSelect(vehicle.id)}
+                  onPress={() => handleVariantSelect(variant.id)}
                 >
                   <View style={styles.vehicleOptionContent}>
-                    {vehicle.image_url ? (
+                    {variant.image_url ? (
                       <Image
-                        source={{ uri: vehicle.image_url }}
+                        source={{ uri: variant.image_url }}
                         style={styles.vehicleOptionImage}
                         resizeMode="cover"
                       />
@@ -634,13 +738,27 @@ export default function CalendarComponent({
                         <Ionicons name="car" size={24} color="#999" />
                       </View>
                     )}
-                    <View style={styles.vehicleOptionInfo}>
-                      <Text style={styles.vehicleOptionText}>
-                        {vehicle.year} {vehicle.make} {vehicle.model}
-                      </Text>
-                    </View>
+                   <View style={styles.vehicleOptionInfo}>
+                  <Text style={styles.vehicleOptionText}>
+                  {variant.vehicles?.model} {variant.vehicles?.make}{variant.vehicles?.year}
+                  </Text>
+                  <View style={styles.vehicleOptionDetails}>
+                    {variant.color && (
+                      <View style={styles.vehicleOptionDetail}>
+                        <Ionicons name="color-palette" size={14} color="#666" />
+                        <Text style={styles.vehicleOptionDetailText}>{variant.color}</Text>
+                      </View>
+                    )}
+                    {variant.plate_number && (
+                      <View style={styles.vehicleOptionDetail}>
+                        <Ionicons name="card" size={14} color="#666" />
+                        <Text style={styles.vehicleOptionDetailText}>{variant.plate_number}</Text>
+                      </View>
+                    )}
                   </View>
-                  {selectedVehicle === vehicle.id && (
+                </View>
+                  </View>
+                  {selectedVariant === variant.id && (
                     <Ionicons name="checkmark-circle" size={24} color="#222" />
                   )}
                 </TouchableOpacity>
@@ -686,7 +804,6 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 4,
   },
-  // NEW styles
   filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -702,10 +819,10 @@ const styles = StyleSheet.create({
     color: '#222',
     fontSize: 14,
     fontWeight: '600',
-    maxWidth: 100,
+    maxWidth: 80
   },
   calendarContainer: {
-    padding: 15,
+    padding: 10
   },
   monthNavigation: {
     flexDirection: 'row',
@@ -755,9 +872,8 @@ const styles = StyleSheet.create({
     borderColor: '#FF6B35',
     borderWidth: 2,
   },
- 
-  hasBookingsCell: {
-    backgroundColor: '#f8f9fa',
+  selectedCell: {
+    backgroundColor: '#fff5f0',
   },
   dayNumber: {
     fontSize: 12,
@@ -808,28 +924,81 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
   },
+  legendContainer: {
+    backgroundColor: '#fff',
+    marginHorizontal: 15,
+    marginBottom: 20,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  legendTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 12,
+    letterSpacing: -0.3,
+  },
   legend: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 12,
+    marginBottom: 12,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: '#f9fafb',
+    borderRadius: 6,
+    minWidth: '28%',
   },
   legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  legendTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   legendText: {
     fontSize: 12,
     color: '#666',
     fontWeight: '500',
+  },
+  legendCount: {
+    fontSize: 12,
+    color: '#111827',
+    fontWeight: '700',
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    marginTop: 4,
+  },
+  totalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
   },
   modalOverlay: {
     flex: 1,
@@ -875,10 +1044,9 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  // NEW styles for vehicle image in booking card
   bookingImageContainer: {
     width: '100%',
-    height: 150,
+    height: 300,
     position: 'relative',
   },
   bookingVehicleImage: {
@@ -897,6 +1065,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  plateNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 6,
+  },
+  plateNumberText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
   },
   bookingContentContainer: {
     padding: 16,
@@ -918,7 +1097,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+
   },
+
   statusText: {
     color: '#fff',
     fontSize: 10,
@@ -936,6 +1117,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+
+  
   noBookings: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -950,9 +1133,9 @@ const styles = StyleSheet.create({
   filterModalContent: {
     backgroundColor: '#fff',
     borderRadius: 20,
-    maxHeight: '70%',
-    width: '85%',
-    maxWidth: 400,
+    maxHeight: '100%',
+    width: '100%',
+    maxWidth: '100%',
     alignSelf: 'center',
   },
   vehicleList: {
@@ -981,24 +1164,35 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   vehicleOptionImage: {
-    width: 50,
-    height: 50,
+    width: 100,
+    height: 60,
     borderRadius: 8,
   },
   vehicleOptionImagePlaceholder: {
-    width: 60,
+    width: 100,
     height: 60,
     borderRadius: 8,
     backgroundColor: '#e5e7eb',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  vehicleOptionInfo: {
-    flex: 1,
+  vehicleOptionSubtext: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
   },
-  vehicleOptionText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
+  vehicleOptionDetails: {
+    marginTop: 6,
+    gap: 4,
+  },
+  vehicleOptionDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  vehicleOptionDetailText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
   },
 });

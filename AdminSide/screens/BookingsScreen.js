@@ -197,6 +197,7 @@ const handleBookingAdded = async (newBooking) => {
           ),
           vehicle_variants (
             color,
+            plate_number,
             available_quantity,
             total_quantity
           )
@@ -822,7 +823,7 @@ const showConfirmation = (title, message, onConfirm) => {
       case 'cancelled':
         return '#ef4444';
       case 'declined':
-      return '#ff4500'; // Darker red for declined
+      return '#8b5cf6'; // Darker red for declined
       default:
         return '#6b7280';
     }
@@ -1460,7 +1461,6 @@ const showConfirmation = (title, message, onConfirm) => {
       </View>
     </View>
   );
-
   const renderItem = ({ item }) => (
     <TouchableOpacity
       onPress={() => openEditModal(item)}
@@ -1471,31 +1471,49 @@ const showConfirmation = (title, message, onConfirm) => {
         <View style={styles.avatarContainer}>
           <Text style={styles.avatarText}>{getInitials(item.customer_name)}</Text>
         </View>
-
+  
         <View style={styles.bookingInfo}>
-          <Text style={styles.customerName}>{item.customer_name}</Text>
-          <Text style={styles.bookingDate}>{formatDate(item.created_at)}</Text>
-
+          <View style={styles.bookingNameRow}>
+            <Ionicons name="person" size={14} color="#6b7280" />
+            <Text style={styles.customerName}>{item.customer_name}</Text>
+          </View>
+          
+          <View style={styles.bookingDateRow}>
+        <Ionicons name="calendar-outline" size={12} color="#6b7280" />
+        <Text style={styles.bookingDate}>
+          {formatDate(item.rental_start_date)} - {formatDate(item.rental_end_date)}
+        </Text>
+      </View>
+        
           {item.vehicles && (
-            <>
+            <View style={styles.bookingVehicleRow}>
+              <Ionicons name="car" size={12} color="#6b7280" />
               <Text style={styles.vehicleInfo}>
                 {item.vehicles.year} {item.vehicles.make} {item.vehicles.model}
               </Text>
-              {item.vehicles.make && (
-                <Text style={styles.vehicleType}>{item.vehicles.make}</Text>
+            </View>
+          )}
+  
+          {item.vehicle_variants && (
+            <>
+              <View style={styles.bookingVariantRow}>
+                <Ionicons name="color-palette" size={12} color="#6b7280" />
+                <Text style={styles.vehicleInfo}>
+                  {item.vehicle_variants.color} ({item.vehicle_variants.available_quantity}/{item.vehicle_variants.total_quantity})
+                </Text>
+              </View>
+              {item.vehicle_variants.plate_number && (
+                <View style={styles.bookingPlateRow}>
+                  <Ionicons name="card" size={12} color="#6b7280" />
+                  <Text style={styles.vehicleInfo}>
+                    {item.vehicle_variants.plate_number}
+                  </Text>
+                </View>
               )}
             </>
           )}
-
-            {item.vehicle_variants && (
-              <Text style={styles.vehicleInfo}>
-                Color: {item.vehicle_variants.color} 
-                ({item.vehicle_variants.available_quantity}/{item.vehicle_variants.total_quantity})
-              </Text>
-            )}
-
         </View>
-
+  
         <View style={styles.rightSection}>
           <Text style={styles.bookingAmount}>{formatAmount(item.total_price)}</Text>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + "20" }]}>
@@ -1504,7 +1522,7 @@ const showConfirmation = (title, message, onConfirm) => {
             </Text>
           </View>
         </View>
-
+  
         <Ionicons name="chevron-forward" size={16} color="#9ca3af" style={styles.chevron} />
       </View>
     </TouchableOpacity>
@@ -1613,6 +1631,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fcfcfc",
+  },
+
+  bookingNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+
+  bookingPlateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 1,
+  },
+  bookingDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  bookingVehicleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 1,
+  },
+  bookingVariantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
 
   header: {
@@ -1971,7 +2020,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#f9fafb',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -1979,7 +2028,7 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#3b82f6',
+    color: '#222',
   },
   bookingInfo: {
     flex: 1,
@@ -2002,7 +2051,7 @@ const styles = StyleSheet.create({
   },
   vehicleType: {
     fontSize: 12,
-    color: '#6366f1',
+    color: '#9ca3af',
     fontWeight: '500',
   },
   rightSection: {

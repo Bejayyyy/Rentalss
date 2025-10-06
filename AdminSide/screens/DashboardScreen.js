@@ -489,18 +489,21 @@ export default function DashboardScreen({ navigation }) {
         .select('*');
       if (vehicleError) throw vehicleError;
 
-      // Fetch bookings with vehicle information
       const { data: bookings, error: bookingError } = await supabase
-        .from('bookings')
-        .select(`
-          *,
-          vehicles (
-            make,
-            model,
-            year
-          )
-        `)
-        .order('created_at', { ascending: false });
+  .from('bookings')
+  .select(`
+    *,
+    vehicles (
+      make,
+      model,
+      year
+    ),
+    vehicle_variants (
+      color,
+      plate_number
+    )
+  `)
+  .order('created_at', { ascending: false });
       if (bookingError) throw bookingError;
 
       // Calculate metrics
@@ -532,8 +535,11 @@ export default function DashboardScreen({ navigation }) {
           return sum + price;
         }, 0) || 0;
 
-      const pendingBookings = bookings?.filter(b => b.status === 'pending').length || 0;
-      const completedBookings = bookings?.filter(b => b.status === 'completed').length || 0;
+        const pendingBookings = bookings?.filter(b => b.status === 'pending').length || 0;
+        const confirmedBookings = bookings?.filter(b => b.status === 'confirmed').length || 0;
+        const completedBookings = bookings?.filter(b => b.status === 'completed').length || 0;
+        const cancelledBookings = bookings?.filter(b => b.status === 'cancelled').length || 0;
+        const declinedBookings = bookings?.filter(b => b.status === 'declined').length || 0;
 
       const currentlyRentedVehicleIds = new Set(
         bookings?.filter(b => {
@@ -561,7 +567,10 @@ export default function DashboardScreen({ navigation }) {
         todayBookings,
         monthlyRevenue,
         pendingBookings,
+        confirmedBookings,  // ✅ Add this
         completedBookings,
+        cancelledBookings,  // ✅ Add this
+        declinedBookings,   // ✅ Add this
         recentBookings
       });
 
@@ -923,7 +932,7 @@ export default function DashboardScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Booking Status Overview */}
+      {/* Booking Status Overview */}
         <View style={styles.statusOverviewCard}>
           <Text style={styles.sectionTitle}>Booking Status Overview</Text>
           <View style={styles.statusGrid}>
@@ -935,10 +944,35 @@ export default function DashboardScreen({ navigation }) {
               </View>
             </View>
             <View style={styles.statusItem}>
-              <View style={[styles.statusIndicator, { backgroundColor: '#059669' }]} />
+              <View style={[styles.statusIndicator, { backgroundColor: '#10b981' }]} />
+              <View>
+                <Text style={styles.statusValue}>{dashboardData.confirmedBookings}</Text>
+                <Text style={styles.statusLabel}>Confirmed</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.statusGrid}>
+            <View style={styles.statusItem}>
+              <View style={[styles.statusIndicator, { backgroundColor: '#3b82f6' }]} />
               <View>
                 <Text style={styles.statusValue}>{dashboardData.completedBookings}</Text>
                 <Text style={styles.statusLabel}>Completed</Text>
+              </View>
+            </View>
+            <View style={styles.statusItem}>
+              <View style={[styles.statusIndicator, { backgroundColor: '#ef4444' }]} />
+              <View>
+                <Text style={styles.statusValue}>{dashboardData.cancelledBookings}</Text>
+                <Text style={styles.statusLabel}>Cancelled</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.statusGrid}>
+            <View style={styles.statusItem}>
+              <View style={[styles.statusIndicator, { backgroundColor: '#8b5cf6' }]} />
+              <View>
+                <Text style={styles.statusValue}>{dashboardData.declinedBookings}</Text>
+                <Text style={styles.statusLabel}>Declined</Text>
               </View>
             </View>
           </View>
@@ -999,39 +1033,61 @@ export default function DashboardScreen({ navigation }) {
             </TouchableOpacity>
           </View>
           {dashboardData.recentBookings.length > 0 ? (
-            dashboardData.recentBookings.map((booking) => (
-              <View key={booking.id} style={styles.bookingItem}>
-                <View style={styles.bookingLeft}>
-                  <View
-                    style={[
-                      styles.bookingStatus,
-                      { backgroundColor: getStatusColor(booking.status) }
-                    ]}
-                  />
-                  <View style={styles.bookingInfo}>
-                    <Text style={styles.bookingCustomer}>{booking.customer_name}</Text>
-                    <Text style={styles.bookingVehicle}>
-                      {booking.vehicles ? `${booking.vehicles.year} ${booking.vehicles.make} ${booking.vehicles.model}` : 'Vehicle Info'}
-                    </Text>
-                    <Text style={styles.bookingDate}>
-                      {formatDate(booking.rental_start_date)} - {formatDate(booking.rental_end_date)}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.bookingRight}>
-                  <Text style={styles.bookingAmount}>
-                    {formatCurrency(booking.total_price)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.bookingStatusText,
-                      { color: getStatusColor(booking.status) }
-                    ]}
-                  >
-                    {booking.status?.charAt(0).toUpperCase() + booking.status?.slice(1)}
-                  </Text>
-                </View>
-              </View>
+  dashboardData.recentBookings.map((booking) => (
+    <View key={booking.id} style={styles.bookingItem}>
+      <View style={styles.bookingLeft}>
+        <View
+          style={[
+            styles.bookingStatus,
+            { backgroundColor: getStatusColor(booking.status) }
+          ]}
+        />
+        <View style={styles.bookingInfo}>
+          <View style={styles.bookingNameRow}>
+            <Ionicons name="person" size={14} color="#6b7280" />
+            <Text style={styles.bookingCustomer}>{booking.customer_name}</Text>
+          </View>
+          
+          {booking.vehicles && (
+            <View style={styles.bookingVehicleRow}>
+              <Ionicons name="car" size={12} color="#6b7280" />
+              <Text style={styles.bookingVehicle}>
+                {`${booking.vehicles.year} ${booking.vehicles.make} ${booking.vehicles.model}`}
+              </Text>
+            </View>
+          )}
+          
+          {booking.vehicle_variants?.plate_number && (
+            <View style={styles.bookingPlateRow}>
+              <Ionicons name="card" size={12} color="#6b7280" />
+              <Text style={styles.bookingVehicle}>
+                {booking.vehicle_variants.plate_number}
+              </Text>
+            </View>
+          )}
+          
+          <View style={styles.bookingDateRow}>
+            <Ionicons name="calendar-outline" size={12} color="#6b7280" />
+            <Text style={styles.bookingDate}>
+              {formatDate(booking.rental_start_date)} - {formatDate(booking.rental_end_date)}
+            </Text>
+          </View>
+        </View>
+      </View>
+      <View style={styles.bookingRight}>
+        <Text style={styles.bookingAmount}>
+          {formatCurrency(booking.total_price)}
+        </Text>
+        <Text
+          style={[
+            styles.bookingStatusText,
+            { color: getStatusColor(booking.status) }
+          ]}
+        >
+          {booking.status?.charAt(0).toUpperCase() + booking.status?.slice(1)}
+        </Text>
+      </View>
+    </View>
             ))
           ) : (
             <View style={styles.emptyState}>
@@ -1093,6 +1149,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18, 
     justifyContent: 'space-between', 
     paddingTop: 8 
+  },
+  bookingNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  bookingVehicleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  bookingPlateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  bookingDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   header: { 
     flexDirection: 'row', 
@@ -1498,35 +1577,43 @@ const styles = StyleSheet.create({
     fontSize: 12, 
     color: '#6b7280' 
   },
+  
   bookingItem: { 
     flexDirection: 'row', 
-    alignItems: 'center', 
+    alignItems: 'stretch', 
     marginBottom: 12, 
     backgroundColor: '#f9fafb', 
     borderRadius: 8, 
     padding: 12, 
     borderWidth: 1, 
-    borderColor: '#e5e7eb' 
+    borderColor: '#e5e7eb',
+    minHeight: 80,
   },
   bookingLeft: { 
     flexDirection: 'row', 
-    alignItems: 'center', 
-    flex: 1 
+    alignItems: 'stretch', 
+    flex: 1,
+    marginRight: 12,
+    minWidth: 0,
   },
   bookingStatus: { 
     width: 4, 
-    height: 48, 
+    alignSelf: 'stretch',
     borderRadius: 8, 
-    marginRight: 12 
+    marginRight: 12,
+    flexShrink: 0,
   },
   bookingInfo: { 
-    flex: 1 
+    flex: 1,
+    justifyContent: 'center',
+    minWidth: 0,
   },
   bookingCustomer: { 
     fontWeight: 'bold', 
     fontSize: 16, 
     marginBottom: 2,
     color: '#111827',
+    flexWrap: 'wrap',
   },
   bookingVehicle: { 
     fontSize: 14, 

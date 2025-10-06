@@ -88,8 +88,21 @@ function CarOwnersStack() {
         presentation: 'transparentModal'
       }}
     >
-      <Stack.Screen name="CarOwnersList" component={CarOwnersScreen} options={{ title: 'Car Owners Management' }} />
-      <Stack.Screen name="OwnerProfile" component={OwnerProfileScreen} options={{ title: 'Owner Profile' }} />
+      <Stack.Screen 
+        name="CarOwnersList" 
+        component={CarOwnersScreen} 
+        options={{ title: 'Car Owners Management' }} 
+      />
+      <Stack.Screen 
+        name="OwnerProfile" 
+        component={OwnerProfileScreen} 
+        options={{ title: 'Owner Profile' }} 
+      />
+      <Stack.Screen 
+        name="AddVehicle" 
+        component={AddVehicleScreen} 
+        options={{ title: 'Add New Vehicle' }} 
+      />
     </Stack.Navigator>
   );
 }
@@ -108,6 +121,48 @@ function ReportsStack() {
     >
       <Stack.Screen name="ReportsList" component={ReportsScreen} options={{ title: 'Performance Reports' }} />
       <Stack.Screen name="CashFlow" component={CashFlowScreen} options={{ title: 'Cash Flow Management' }} />
+    </Stack.Navigator>
+  );
+}
+
+function DashboardStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: '#000' },
+        headerTintColor: '#fff',
+        headerTitleStyle: { fontFamily: 'Roboto' },
+        animationEnabled: false,
+        cardStyle: { backgroundColor: 'transparent' },
+        presentation: 'transparentModal'
+      }}
+    >
+      <Stack.Screen 
+        name="DashboardView" 
+        component={DashboardScreen} 
+        options={{ title: 'Dashboard Overview' }} 
+      />
+    </Stack.Navigator>
+  );
+}
+
+function CalendarStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: '#000' },
+        headerTintColor: '#fff',
+        headerTitleStyle: { fontFamily: 'Roboto' },
+        animationEnabled: false,
+        cardStyle: { backgroundColor: 'transparent' },
+        presentation: 'transparentModal'
+      }}
+    >
+      <Stack.Screen 
+        name="CalendarView" 
+        component={CalendarScreen} 
+        options={{ title: 'Rental Calendar' }} 
+      />
     </Stack.Navigator>
   );
 }
@@ -166,9 +221,31 @@ function MainNavigator() {
       >
         <Tab.Screen
           name="Dashboard"
-          component={DashboardScreen}
+          component={DashboardStack}
           options={{
+            headerShown: false,
             title: '',
+            unmountOnBlur: true,
+            listeners: ({ navigation, route }) => ({
+              blur: () => {
+                try {
+                  const tabState = navigation.getState();
+                  const tabRoute = tabState.routes.find(r => r.name === route.name);
+                  const nestedKey = tabRoute?.state?.key;
+                  if (nestedKey) {
+                    navigation.dispatch({
+                      ...CommonActions.reset({
+                        index: 0,
+                        routes: [{ name: 'DashboardView' }],
+                      }),
+                      target: nestedKey,
+                    });
+                  }
+                } catch (err) {
+                  console.warn('Dashboard blur reset failed', err);
+                }
+              },
+            }),
           }}
         />
 
@@ -294,9 +371,31 @@ function MainNavigator() {
 
         <Tab.Screen
           name="Calendar"
-          component={CalendarScreen}
+          component={CalendarStack}
           options={{
+            headerShown: false,
             title: '',
+            unmountOnBlur: true,
+            listeners: ({ navigation, route }) => ({
+              blur: () => {
+                try {
+                  const tabState = navigation.getState();
+                  const tabRoute = tabState.routes.find(r => r.name === route.name);
+                  const nestedKey = tabRoute?.state?.key;
+                  if (nestedKey) {
+                    navigation.dispatch({
+                      ...CommonActions.reset({
+                        index: 0,
+                        routes: [{ name: 'CalendarView' }],
+                      }),
+                      target: nestedKey,
+                    });
+                  }
+                } catch (err) {
+                  console.warn('Calendar blur reset failed', err);
+                }
+              },
+            }),
           }}
         />
       </Tab.Navigator>

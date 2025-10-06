@@ -22,6 +22,60 @@ export default function OwnerProfileScreen({ navigation, route }) {
 
   useEffect(() => {
     fetchOwnerData();
+
+    // Set up real-time subscriptions
+    const bookingsSubscription = supabase
+      .channel('owner-bookings-channel')
+      .on('postgres_changes', 
+        { 
+          event: '*', // Listen to INSERT, UPDATE, and DELETE
+          schema: 'public', 
+          table: 'bookings' 
+        }, 
+        (payload) => {
+          console.log('Booking change detected:', payload.eventType, payload);
+          
+          // Handle different event types
+          switch(payload.eventType) {
+            case 'INSERT':
+              console.log('New booking added');
+              break;
+            case 'UPDATE':
+              console.log('Booking updated');
+              break;
+            case 'DELETE':
+              console.log('Booking deleted:', payload.old);
+              break;
+          }
+          
+          // Refresh owner data when any booking changes
+          fetchOwnerData();
+        }
+      )
+      .subscribe();
+
+    // Subscribe to vehicle_variants changes
+    const variantsSubscription = supabase
+      .channel('owner-variants-channel')
+      .on('postgres_changes', 
+        { 
+          event: '*',
+          schema: 'public', 
+          table: 'vehicle_variants',
+          filter: `owner_id=eq.${ownerId}` // Only listen to this owner's variants
+        }, 
+        (payload) => {
+          console.log('Vehicle variant change detected:', payload.eventType);
+          fetchOwnerData();
+        }
+      )
+      .subscribe();
+
+    // Cleanup both subscriptions on unmount
+    return () => {
+      supabase.removeChannel(bookingsSubscription);
+      supabase.removeChannel(variantsSubscription);
+    };
   }, [ownerId]);
 
   const fetchOwnerData = async () => {
@@ -35,19 +89,27 @@ export default function OwnerProfileScreen({ navigation, route }) {
 
       if (ownerError) throw ownerError;
 
-      // Fetch owner's vehicles
-      const { data: vehiclesData, error: vehiclesError } = await supabase
-        .from('vehicles')
-        .select('*')
+      // Fetch vehicle variants owned by this owner
+      const { data: variantsData, error: variantsError } = await supabase
+        .from('vehicle_variants')
+        .select(`
+          *,
+          vehicles (
+            make,
+            model,
+            year,
+            id
+          )
+        `)
         .eq('owner_id', ownerId);
 
-      if (vehiclesError) throw vehiclesError;
+      if (variantsError) throw variantsError;
 
-      // Fetch bookings for owner's vehicles
-      const vehicleIds = vehiclesData?.map(v => v.id) || [];
+      // Fetch bookings for these variants
+      const variantIds = variantsData?.map(v => v.id) || [];
       let allBookings = [];
 
-      if (vehicleIds.length > 0) {
+      if (variantIds.length > 0) {
         const { data: bookingsData, error: bookingsError } = await supabase
           .from('bookings')
           .select(`
@@ -56,27 +118,32 @@ export default function OwnerProfileScreen({ navigation, route }) {
               make,
               model,
               year
+            ),
+            vehicle_variants (
+              color,
+              plate_number
             )
           `)
-          .in('vehicle_id', vehicleIds)
+          .in('vehicle_variant_id', variantIds)
           .order('created_at', { ascending: false });
 
         if (!bookingsError) {
           allBookings = bookingsData || [];
         }
       }
+    
 
-      // Calculate vehicle earnings
-      const vehiclesWithEarnings = vehiclesData?.map(vehicle => {
-        const vehicleBookings = allBookings.filter(b => b.vehicle_id === vehicle.id);
-        const totalEarned = vehicleBookings
+      // Calculate variant earnings
+      const variantsWithEarnings = variantsData?.map(variant => {
+        const variantBookings = allBookings.filter(b => b.vehicle_variant_id === variant.id);
+        const totalEarned = variantBookings
           .filter(b => b.status === 'completed')
           .reduce((sum, b) => sum + parseFloat(b.total_price || 0), 0);
 
         return {
-          ...vehicle,
+          ...variant,
           totalEarned,
-          bookingsCount: vehicleBookings.length
+          bookingsCount: variantBookings.length
         };
       }) || [];
 
@@ -97,7 +164,7 @@ export default function OwnerProfileScreen({ navigation, route }) {
         pendingPayments,
         activeBookings
       });
-      setVehicles(vehiclesWithEarnings);
+      setVehicles(variantsWithEarnings);
       setBookings(allBookings);
     } catch (error) {
       console.error('Error fetching owner data:', error);
@@ -140,12 +207,17 @@ export default function OwnerProfileScreen({ navigation, route }) {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Owner Profile</Text>
-        </View>
+       {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Owner Profile</Text>
+        <TouchableOpacity 
+        style={styles.addVehicleButton}
+        onPress={() => navigation.navigate("AddVehicle")}
+      >
+        <Ionicons name="add" size={20} color="white" />
+        <Text style={styles.addVehicleButtonText}>Add Vehicle</Text>
+      </TouchableOpacity>
+      </View>
 
         {/* Profile Card */}
         <View style={styles.profileCard}>
@@ -217,20 +289,29 @@ export default function OwnerProfileScreen({ navigation, route }) {
               <Text style={styles.emptyStateText}>No vehicles found</Text>
             </View>
           ) : (
-            vehicles.map(vehicle => (
-              <View key={vehicle.id} style={styles.vehicleEarningCard}>
+            vehicles.map(variant => (
+              <View key={variant.id} style={styles.vehicleEarningCard}>
                 <View style={styles.vehicleEarningIcon}>
-                  <Ionicons name="car" size={24} color="#6b7280" />
+                  <Ionicons name="car" size={24} color="#fcfcfc" />
                 </View>
                 <View style={styles.vehicleEarningInfo}>
                   <Text style={styles.vehicleEarningName}>
-                    {vehicle.year} {vehicle.make} {vehicle.model}
+                    {variant.vehicles?.year} {variant.vehicles?.make} {variant.vehicles?.model}
                   </Text>
-                  <Text style={styles.vehicleEarningId}>Vehicle ID: {vehicle.id}</Text>
+                  <View style={styles.vehicleEarningDetails}>
+                    <View style={styles.vehicleDetailRow}>
+                      <Ionicons name="color-palette" size={14} color="#6b7280" />
+                      <Text style={styles.vehicleEarningSubtext}>{variant.color}</Text>
+                    </View>
+                    <View style={styles.vehicleDetailRow}>
+                      <Ionicons name="card" size={14} color="#6b7280" />
+                      <Text style={styles.vehicleEarningSubtext}>{variant.plate_number}</Text>
+                    </View>
+                  </View>
                 </View>
                 <View style={styles.vehicleEarningAmount}>
                   <Text style={[styles.earningAmount, { color: '#10b981', fontSize: 18 }]}>
-                    ₱{vehicle.totalEarned.toLocaleString()}
+                    ₱{variant.totalEarned.toLocaleString()}
                   </Text>
                   <Text style={styles.earningLabel}>Total earned</Text>
                 </View>
@@ -253,7 +334,10 @@ export default function OwnerProfileScreen({ navigation, route }) {
             bookings.slice(0, 5).map(booking => (
               <View key={booking.id} style={styles.bookingCard}>
                 <View style={styles.bookingHeader}>
-                  <Text style={styles.bookingCustomer}>{booking.customer_name}</Text>
+                  <View style={styles.bookingCustomerRow}>
+                    <Ionicons name="person" size={16} color="#111827" />
+                    <Text style={styles.bookingCustomer}>{booking.customer_name}</Text>
+                  </View>
                   <View style={[styles.bookingStatusBadge, { 
                     backgroundColor: getStatusColor(booking.status) + '20' 
                   }]}>
@@ -264,12 +348,28 @@ export default function OwnerProfileScreen({ navigation, route }) {
                     </Text>
                   </View>
                 </View>
-                <Text style={styles.bookingVehicle}>
-                  {booking.vehicles?.year} {booking.vehicles?.make} {booking.vehicles?.model}
-                </Text>
+                <View style={styles.bookingVehicleRow}>
+                  <Ionicons name="car" size={14} color="#6b7280" />
+                  <Text style={styles.bookingVehicle}>
+                    {booking.vehicles?.year} {booking.vehicles?.make} {booking.vehicles?.model}
+                    {booking.vehicle_variants?.color && ` - ${booking.vehicle_variants.color}`}
+                  </Text>
+                </View>
+                {booking.vehicle_variants?.plate_number && (
+                  <View style={styles.bookingPlateRow}>
+                    <Ionicons name="card" size={14} color="#6b7280" />
+                    <Text style={styles.bookingPlateText}>{booking.vehicle_variants.plate_number}</Text>
+                  </View>
+                )}
                 <View style={styles.bookingFooter}>
-                  <Text style={styles.bookingDate}>{formatDate(booking.created_at)}</Text>
-                  <Text style={styles.bookingAmount}>₱{parseFloat(booking.total_price).toLocaleString()}</Text>
+                  <View style={styles.bookingDateRow}>
+                    <Ionicons name="calendar-outline" size={14} color="#6b7280" />
+                    <Text style={styles.bookingDate}>{formatDate(booking.created_at)}</Text>
+                  </View>
+                  <View style={styles.bookingAmountRow}>
+                    <Ionicons name="cash-outline" size={14} color="#10b981" />
+                    <Text style={styles.bookingAmount}>₱{parseFloat(booking.total_price).toLocaleString()}</Text>
+                  </View>
                 </View>
               </View>
             ))
@@ -291,11 +391,13 @@ const getStatusColor = (status) => {
     case 'cancelled':
       return '#ef4444';
     case 'declined':
-      return '#dc2626';
+      return '#8b5cf6';
     default:
       return '#6b7280';
   }
 };
+
+// ... rest of your styles remain the same
 
 const styles = StyleSheet.create({
   container: {
@@ -311,7 +413,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     paddingHorizontal: 20,
     paddingVertical: 16,
-
+    flexDirection: 'row',  // ✅ Add this
+    justifyContent: 'space-between',  // ✅ Add this
+    alignItems: 'center',  // ✅ Add this
+  },
+  addVehicleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#222',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
+    gap: 6,
+  },
+  addVehicleButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   backButton: {
     flexDirection: 'row',
@@ -445,6 +568,7 @@ const styles = StyleSheet.create({
     elevation: 3,
     borderWidth: 1,
     borderColor: '#e5e7eb',
+    marginBottom: 20,
   },
   sectionTitle: {
     fontSize: 18,
@@ -471,7 +595,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#222',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -483,10 +607,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#111827',
-    marginBottom: 2,
+    marginBottom: 6,
   },
-  vehicleEarningId: {
-    fontSize: 12,
+  vehicleEarningDetails: {
+    gap: 4,
+  },
+  vehicleDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  vehicleEarningSubtext: {
+    fontSize: 13,
     color: '#6b7280',
   },
   vehicleEarningAmount: {
@@ -524,16 +656,49 @@ const styles = StyleSheet.create({
   bookingVehicle: {
     fontSize: 14,
     color: '#6b7280',
-    marginBottom: 8,
+  },
+
+  bookingCustomerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  bookingVehicleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  bookingPlateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  bookingPlateText: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: '500',
   },
   bookingFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  bookingDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   bookingDate: {
     fontSize: 13,
     color: '#6b7280',
+  },
+  bookingAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   bookingAmount: {
     fontSize: 16,
