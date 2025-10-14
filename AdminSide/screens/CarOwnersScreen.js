@@ -25,6 +25,10 @@ export default function CarOwnersScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [confirmAddModal, setConfirmAddModal] = useState(false);
+  const [confirmDeleteModal, setConfirmDeleteModal] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [selectedOwner, setSelectedOwner] = useState(null);
   const [feedbackModal, setFeedbackModal] = useState({
     visible: false,
     type: "success",
@@ -41,17 +45,34 @@ export default function CarOwnersScreen({ navigation }) {
   useEffect(() => {
     fetchOwners();
     
-    // Real-time subscription
+    // Real-time subscriptions for multiple tables
     const ownersSubscription = supabase
       .channel('owners-channel')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'car_owners' }, 
-        () => fetchOwners()
+        () => {
+          console.log('Car owners changed, refreshing...');
+          fetchOwners();
+        }
+      )
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'bookings' }, 
+        () => {
+          console.log('Bookings changed, refreshing...');
+          fetchOwners();
+        }
+      )
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'vehicle_variants' }, 
+        () => {
+          console.log('Vehicle variants changed, refreshing...');
+          fetchOwners();
+        }
       )
       .subscribe();
 
     return () => {
-      ownersSubscription.unsubscribe();
+      supabase.removeChannel(ownersSubscription);
     };
   }, []);
 
@@ -61,7 +82,7 @@ export default function CarOwnersScreen({ navigation }) {
 
   const fetchOwners = async () => {
     try {
-      // Fetch owners with their vehicles and calculate earnings
+      // Fetch owners
       const { data: ownersData, error: ownersError } = await supabase
         .from('car_owners')
         .select('*')
@@ -69,21 +90,34 @@ export default function CarOwnersScreen({ navigation }) {
 
       if (ownersError) throw ownersError;
 
-      // For each owner, fetch their vehicles and bookings
+      // For each owner, fetch their vehicle variants and bookings
       const ownersWithStats = await Promise.all(
         ownersData.map(async (owner) => {
-          // Get vehicles count
-          const { data: vehicles, error: vehiclesError } = await supabase
-            .from('vehicles')
+          // Get vehicle variants for this owner
+          const { data: variants, error: variantsError } = await supabase
+            .from('vehicle_variants')
             .select('id')
             .eq('owner_id', owner.id);
 
-          // Get earnings from completed bookings
-          const { data: bookings, error: bookingsError } = await supabase
-            .from('bookings')
-            .select('total_price, status, vehicle_id, vehicles!inner(owner_id)')
-            .eq('vehicles.owner_id', owner.id);
+          const variantIds = variants?.map(v => v.id) || [];
+          const vehiclesCount = variants?.length || 0;
 
+          console.log(`Owner: ${owner.name}, Variant IDs:`, variantIds);
+
+          // Get bookings for these vehicle variants
+          let bookings = [];
+          if (variantIds.length > 0) {
+            const { data: bookingsData, error: bookingsError } = await supabase
+              .from('bookings')
+              .select('total_price, status, vehicle_variant_id')
+              .in('vehicle_variant_id', variantIds);
+
+            bookings = bookingsData || [];
+            console.log(`Owner: ${owner.name}, Total bookings:`, bookings.length);
+            console.log(`Owner: ${owner.name}, Bookings data:`, bookings);
+          }
+
+          // Calculate earnings and stats
           const totalEarnings = bookings
             ?.filter(b => b.status === 'completed')
             .reduce((sum, b) => sum + parseFloat(b.total_price || 0), 0) || 0;
@@ -95,9 +129,11 @@ export default function CarOwnersScreen({ navigation }) {
           const activeBookings = bookings
             ?.filter(b => b.status === 'confirmed').length || 0;
 
+          console.log(`Owner: ${owner.name}, Active bookings:`, activeBookings);
+
           return {
             ...owner,
-            vehiclesCount: vehicles?.length || 0,
+            vehiclesCount,
             totalEarnings,
             pendingPayments,
             activeBookings
@@ -105,7 +141,14 @@ export default function CarOwnersScreen({ navigation }) {
         })
       );
 
-      setOwners(ownersWithStats);
+      // Sort to keep "Rental Den" at the top
+      const sortedOwners = ownersWithStats.sort((a, b) => {
+        if (a.name.toLowerCase() === 'rental den') return -1;
+        if (b.name.toLowerCase() === 'rental den') return 1;
+        return 0;
+      });
+
+      setOwners(sortedOwners);
     } catch (error) {
       console.error('Error fetching owners:', error);
       Alert.alert('Error', 'Failed to fetch car owners');
@@ -134,12 +177,16 @@ export default function CarOwnersScreen({ navigation }) {
     setFilteredOwners(filtered);
   };
 
-  const addNewOwner = async () => {
+  const handleAddOwnerClick = () => {
     if (!formData.name.trim() || !formData.email.trim() || !formData.phone.trim()) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
+    setAddModalVisible(false);
+    setConfirmAddModal(true);
+  };
 
+  const addNewOwner = async () => {
     try {
       const { data, error } = await supabase
         .from('car_owners')
@@ -161,7 +208,7 @@ export default function CarOwnersScreen({ navigation }) {
         message: "Car owner added successfully!"
       });
 
-      setAddModalVisible(false);
+      setConfirmAddModal(false);
       setFormData({ name: '', email: '', phone: '' });
       await fetchOwners();
     } catch (error) {
@@ -171,6 +218,66 @@ export default function CarOwnersScreen({ navigation }) {
         type: "error",
         message: "Failed to add car owner"
       });
+      setConfirmAddModal(false);
+    }
+  };
+
+  const handleDeleteOwner = (owner) => {
+    // Prevent deletion of Rental Den
+    if (owner.name.toLowerCase() === 'rental den') {
+      Alert.alert('Cannot Delete', 'Rental Den is the main business owner and cannot be deleted.');
+      return;
+    }
+    setSelectedOwner(owner);
+    setConfirmDeleteModal(true);
+  };
+
+  const proceedToDelete = () => {
+    setConfirmDeleteModal(false);
+    setDeleteModalVisible(true);
+  };
+
+  const confirmDeleteOwner = async () => {
+    if (!selectedOwner) return;
+
+    try {
+      // Check if owner has vehicles
+      if (selectedOwner.vehiclesCount > 0) {
+        setDeleteModalVisible(false);
+        setFeedbackModal({
+          visible: true,
+          type: "error",
+          message: "Cannot delete owner with existing vehicles. Please remove all vehicles first."
+        });
+        setSelectedOwner(null);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('car_owners')
+        .delete()
+        .eq('id', selectedOwner.id);
+
+      if (error) throw error;
+
+      setFeedbackModal({
+        visible: true,
+        type: "success",
+        message: "Car owner deleted successfully!"
+      });
+
+      setDeleteModalVisible(false);
+      setSelectedOwner(null);
+      await fetchOwners();
+    } catch (error) {
+      console.error('Error deleting owner:', error);
+      setFeedbackModal({
+        visible: true,
+        type: "error",
+        message: "Failed to delete car owner"
+      });
+      setDeleteModalVisible(false);
+      setSelectedOwner(null);
     }
   };
 
@@ -288,60 +395,82 @@ export default function CarOwnersScreen({ navigation }) {
     </View>
   );
 
-  const renderOwnerItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.ownerCard}
-      onPress={() => navigation.navigate('OwnerProfile', { ownerId: item.id })}
-    >
-      <View style={styles.ownerHeader}>
-        <View style={styles.avatarContainer}>
-          <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
-        </View>
-        <View style={styles.ownerInfo}>
-          <Text style={styles.ownerName}>{item.name}</Text>
-          <Text style={styles.ownerEmail}>{item.email}</Text>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: item.status === 'active' ? '#10b981' : '#6b7280' }]}>
-          <Text style={styles.statusText}>{item.status}</Text>
-        </View>
-      </View>
-
-      <View style={styles.ownerStats}>
-        <View style={styles.statRow}>
-          <Text style={[styles.statAmount, { color: '#10b981' }]}>
-            ₱{item.totalEarnings.toLocaleString()}
-          </Text>
-          <Text style={styles.statLabel}>Total Earnings</Text>
-        </View>
-
-        <View style={styles.statRow}>
-          <Text style={[styles.statAmount, { color: '#f59e0b' }]}>
-            ₱{item.pendingPayments.toLocaleString()}
-          </Text>
-          <Text style={styles.statLabel}>Pending</Text>
-        </View>
-      </View>
-
-      <View style={styles.ownerFooter}>
-        <View style={styles.footerItem}>
-          <Ionicons name="car" size={16} color="#6b7280" />
-          <Text style={styles.footerText}>{item.vehiclesCount} vehicles</Text>
-        </View>
-        <View style={styles.footerItem}>
-          <Ionicons name="calendar" size={16} color="#6b7280" />
-          <Text style={styles.footerText}>{item.activeBookings} active bookings</Text>
-        </View>
-      </View>
-
-      <TouchableOpacity 
-        style={styles.viewButton}
+  const renderOwnerItem = ({ item }) => {
+    const isRentalDen = item.name.toLowerCase() === 'rental den';
+    
+    return (
+      <TouchableOpacity
+        style={[styles.ownerCard, isRentalDen && styles.ownerCardRentalDen]}
         onPress={() => navigation.navigate('OwnerProfile', { ownerId: item.id })}
       >
-        <Ionicons name="eye" size={16} color="black" />
-        <Text style={styles.viewButtonText}>View Profile & Earnings</Text>
+        {isRentalDen && (
+          <View style={styles.mainOwnerBadge}>
+            <Ionicons name="star" size={14} color="#f59e0b" />
+            <Text style={styles.mainOwnerText}>Main Business Owner</Text>
+          </View>
+        )}
+        
+        <View style={styles.ownerHeader}>
+          <View style={[styles.avatarContainer, isRentalDen && styles.avatarRentalDen]}>
+            <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
+          </View>
+          <View style={styles.ownerInfo}>
+            <Text style={styles.ownerName}>{item.name}</Text>
+            <Text style={styles.ownerEmail}>{item.email}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: item.status === 'active' ? '#10b981' : '#6b7280' }]}>
+            <Text style={styles.statusText}>{item.status}</Text>
+          </View>
+        </View>
+
+        <View style={styles.ownerStats}>
+          <View style={styles.statRow}>
+            <Text style={[styles.statAmount, { color: '#10b981' }]}>
+              ₱{item.totalEarnings.toLocaleString()}
+            </Text>
+            <Text style={styles.statLabel}>Total Earnings</Text>
+          </View>
+
+          <View style={styles.statRow}>
+            <Text style={[styles.statAmount, { color: '#f59e0b' }]}>
+              ₱{item.pendingPayments.toLocaleString()}
+            </Text>
+            <Text style={styles.statLabel}>Pending</Text>
+          </View>
+        </View>
+
+        <View style={styles.ownerFooter}>
+          <View style={styles.footerItem}>
+            <Ionicons name="car" size={16} color="#6b7280" />
+            <Text style={styles.footerText}>{item.vehiclesCount} vehicles</Text>
+          </View>
+          <View style={styles.footerItem}>
+            <Ionicons name="calendar" size={16} color="#6b7280" />
+            <Text style={styles.footerText}>{item.activeBookings} active bookings</Text>
+          </View>
+        </View>
+
+        <View style={styles.actionButtons}>
+          <TouchableOpacity 
+            style={styles.viewButton}
+            onPress={() => navigation.navigate('OwnerProfile', { ownerId: item.id })}
+          >
+            <Ionicons name="eye" size={16} color="black" />
+            <Text style={styles.viewButtonText}>View Profile</Text>
+          </TouchableOpacity>
+
+          {!isRentalDen && (
+            <TouchableOpacity 
+              style={styles.deleteButton}
+              onPress={() => handleDeleteOwner(item)}
+            >
+              <Ionicons name="trash-outline" size={16} color="#ef4444" />
+            </TouchableOpacity>
+          )}
+        </View>
       </TouchableOpacity>
-    </TouchableOpacity>
-  );
+    );
+  };
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
@@ -418,7 +547,7 @@ export default function CarOwnersScreen({ navigation }) {
                 <Text style={styles.inputLabel}>Phone Number</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder=""
+                  placeholder="+63 XXX XXX XXXX"
                   value={formData.phone}
                   onChangeText={(text) => setFormData({ ...formData, phone: text })}
                   keyboardType="phone-pad"
@@ -434,13 +563,55 @@ export default function CarOwnersScreen({ navigation }) {
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.submitButton} onPress={addNewOwner}>
-                <Text style={styles.submitButtonText}>Add Owner</Text>
+              <TouchableOpacity style={styles.submitButton} onPress={handleAddOwnerClick}>
+                <Text style={styles.submitButtonText}>Continue</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
+      {/* Confirm Add Modal */}
+      <ActionModal
+        visible={confirmAddModal}
+        type="confirm"
+        title="Confirm Add Owner"
+        message={`Are you sure you want to add "${formData.name}" as a car owner?`}
+        confirmText="Add Owner"
+        cancelText="Cancel"
+        onClose={() => setConfirmAddModal(false)}
+        onConfirm={addNewOwner}
+      />
+
+      {/* First Delete Confirmation Modal */}
+      <ActionModal
+        visible={confirmDeleteModal}
+        type="delete"
+        title="Delete Car Owner"
+        message={`Are you sure you want to delete "${selectedOwner?.name}"?`}
+        confirmText="Continue"
+        cancelText="Cancel"
+        onClose={() => {
+          setConfirmDeleteModal(false);
+          setSelectedOwner(null);
+        }}
+        onConfirm={proceedToDelete}
+      />
+
+      {/* Final Delete Confirmation Modal */}
+      <ActionModal
+        visible={deleteModalVisible}
+        type="delete"
+        title="Final Confirmation"
+        message={`This action cannot be undone. Are you absolutely sure you want to delete "${selectedOwner?.name}"?`}
+        confirmText="Yes, Delete"
+        cancelText="Cancel"
+        onClose={() => {
+          setDeleteModalVisible(false);
+          setSelectedOwner(null);
+        }}
+        onConfirm={confirmDeleteOwner}
+      />
     </SafeAreaView>
   );
 }
@@ -456,16 +627,13 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: 'white',
     paddingHorizontal: 25,
-    marginTop:8,
+    marginTop: 8,
     paddingVertical: 16,
- 
   },
   headerContent: {
     flex: 1,
     backgroundColor: "#fcfcfc",
-
   },
-
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -535,8 +703,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     marginBottom: 12,
   },
-
-  
   addButtonSmall: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -548,11 +714,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   addButtonSmallText: {
-        color: "white",
-        fontSize: 14,
-        fontWeight: "600",
-        marginLeft: 6,
-      },
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -608,6 +774,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
+  ownerCardRentalDen: {
+    borderWidth: 2,
+    borderColor: '#f59e0b',
+    backgroundColor: '#fffbeb',
+  },
+  mainOwnerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+    gap: 6,
+  },
+  mainOwnerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#d97706',
+  },
   ownerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -621,6 +808,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  avatarRentalDen: {
+    backgroundColor: '#f59e0b',
   },
   avatarText: {
     fontSize: 20,
@@ -682,7 +872,12 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontWeight: '500',
   },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   viewButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -695,6 +890,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#222',
+  },
+  deleteButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fef2f2',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fecaca',
   },
   emptyState: {
     alignItems: 'center',

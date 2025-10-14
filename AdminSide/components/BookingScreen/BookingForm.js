@@ -574,7 +574,7 @@ export default function BookingForm({
 
         {/* Gov ID */}
         <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Government ID</Text>
+          <Text style={styles.inputLabel}>Driver's License Card</Text>
           <TouchableOpacity 
             style={[
               {
@@ -616,7 +616,7 @@ export default function BookingForm({
                   color: 'white',
                   fontWeight: '500',
                 }}>
-                  {booking.gov_id_url ? "Change Government ID" : "Upload Government ID"}
+                  {booking.gov_id_url ? "Change Driver's License Card" : "Upload Driver's License Card"}
                 </Text>
               </>
             )}

@@ -822,7 +822,8 @@ const styles = StyleSheet.create({
     maxWidth: 80
   },
   calendarContainer: {
-    padding: 10
+    padding: 5,
+    marginLeft:10
   },
   monthNavigation: {
     flexDirection: 'row',

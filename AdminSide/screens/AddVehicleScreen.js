@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -59,14 +58,14 @@ export default function AddVehicleScreen({ navigation, route }) {
     }
   }
 
+  // MODIFIED: Removed totalQuantity and availableQuantity, added isAvailable
   const [colorVariants, setColorVariants] = useState([
     {
       id: Date.now(),
       color: "",
       plateNumber: "",
       pricePerDay: "",
-      totalQuantity: "1",
-      availableQuantity: "1",
+      isAvailable: true, // NEW: Availability toggle instead of quantities
       imageUri: null,
       imageUrl: null,
       ownerId: null
@@ -77,8 +76,10 @@ export default function AddVehicleScreen({ navigation, route }) {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [showDeleteVariantModal, setShowDeleteVariantModal] = useState(false)
   const [variantToDelete, setVariantToDelete] = useState(null)
+  const [showCustomType, setShowCustomType] = useState(false)
+  const [customType, setCustomType] = useState("")
 
-  const vehicleTypes = ["Sedan", "SUV", "Hatchback", "Convertible", "Truck", "Van", "Luxury"]
+  const vehicleTypes = ["Sedan", "SUV", "Hatchback", "Convertible", "Truck", "Van", "Luxury", "Other"]
 
   useEffect(() => {
     fetchCarOwners();
@@ -112,9 +113,17 @@ export default function AddVehicleScreen({ navigation, route }) {
   useEffect(() => {
     if (isEditing && editingVehicle?.id) {
       loadExistingVariants()
+      
+      // Check if the vehicle type is a custom one
+      if (editingVehicle.type && !vehicleTypes.slice(0, -1).includes(editingVehicle.type)) {
+        setShowCustomType(true)
+        setCustomType(editingVehicle.type)
+        setFormData(prev => ({ ...prev, type: "Other" }))
+      }
     }
   }, [isEditing, editingVehicle?.id])
 
+  // MODIFIED: Load existing variants with is_available field
   const loadExistingVariants = async () => {
     try {
       const { data: variants, error } = await supabase
@@ -133,8 +142,7 @@ export default function AddVehicleScreen({ navigation, route }) {
           color: variant.color,
           plateNumber: variant.plate_number || "",
           pricePerDay: variant.price_per_day?.toString() || "",
-          totalQuantity: variant.total_quantity.toString(),
-          availableQuantity: variant.available_quantity.toString(),
+          isAvailable: variant.is_available ?? true, // MODIFIED: Use is_available field
           imageUri: variant.image_url,
           imageUrl: variant.image_url,
           ownerId: variant.owner_id
@@ -146,14 +154,14 @@ export default function AddVehicleScreen({ navigation, route }) {
     }
   }
 
+  // MODIFIED: New variant includes isAvailable instead of quantities
   const addColorVariant = () => {
     const newVariant = {
       id: Date.now(),
       color: "",
       plateNumber: "",
       pricePerDay: "",
-      totalQuantity: "1",
-      availableQuantity: "1",
+      isAvailable: true, // NEW
       imageUri: null,
       imageUrl: null,
       ownerId: null
@@ -276,9 +284,31 @@ export default function AddVehicleScreen({ navigation, route }) {
     }
   };
 
+  const handleTypeSelection = (type) => {
+    if (type === "Other") {
+      setShowCustomType(true)
+      setFormData({ ...formData, type })
+    } else {
+      setShowCustomType(false)
+      setCustomType("")
+      setFormData({ ...formData, type })
+    }
+  }
+
+  // MODIFIED: Updated validation - removed quantity checks
   const validateForm = () => {
     if (!formData.make || !formData.model || !formData.year || !formData.seats) {
       Alert.alert("Error", "Please fill in all required basic information fields")
+      return false
+    }
+
+    if (!formData.type) {
+      Alert.alert("Error", "Please select a vehicle type")
+      return false
+    }
+
+    if (formData.type === "Other" && !customType.trim()) {
+      Alert.alert("Error", "Please enter a custom vehicle type")
       return false
     }
 
@@ -311,14 +341,6 @@ export default function AddVehicleScreen({ navigation, route }) {
         Alert.alert("Error", `Please select an owner for ${variant.color || 'variant ' + (validVariants.indexOf(variant) + 1)}`)
         return false
       }
-      if (Number.parseInt(variant.totalQuantity) < 1) {
-        Alert.alert("Error", `Total quantity for ${variant.color} must be at least 1`)
-        return false
-      }
-      if (Number.parseInt(variant.availableQuantity) > Number.parseInt(variant.totalQuantity)) {
-        Alert.alert("Error", `Available quantity for ${variant.color} cannot exceed total quantity`)
-        return false
-      }
     }
 
     return true
@@ -329,6 +351,7 @@ export default function AddVehicleScreen({ navigation, route }) {
     setShowConfirmModal(true)
   }
 
+  // MODIFIED: Updated submit handler to use is_available
   const handleSubmit = async () => {
     setShowConfirmModal(false)
     setLoading(true)
@@ -355,17 +378,17 @@ export default function AddVehicleScreen({ navigation, route }) {
         })
       )
   
-      const totalQuantity = variantsWithImages.reduce((sum, variant) => 
-        sum + Number.parseInt(variant.totalQuantity), 0)
-      const availableQuantity = variantsWithImages.reduce((sum, variant) => 
-        sum + Number.parseInt(variant.availableQuantity), 0)
+      // MODIFIED: Calculate totals based on count and availability
+      const totalQuantity = variantsWithImages.length
+      const availableQuantity = variantsWithImages.filter(v => v.isAvailable).length
       
-      // CRITICAL: Use EXACTLY the first variant's price - no calculations
+      const finalType = formData.type === "Other" ? customType.trim() : formData.type
+      
       const vehicleData = {
         make: formData.make,
         model: formData.model,
         year: Number.parseInt(formData.year),
-        type: formData.type,
+        type: finalType,
         seats: Number.parseInt(formData.seats),
         price_per_day: Number.parseFloat(variantsWithImages[0]?.pricePerDay || "0"),
         mileage: formData.mileage ? Number.parseInt(formData.mileage) : null,
@@ -412,14 +435,14 @@ export default function AddVehicleScreen({ navigation, route }) {
         vehicleId = newVehicle.id
       }
   
+      // MODIFIED: Insert variants with is_available field
       const variantInserts = variantsWithImages.map(variant => ({
         vehicle_id: vehicleId,
         color: variant.color,
         plate_number: variant.plateNumber.trim().toUpperCase(),
         price_per_day: Number.parseFloat(variant.pricePerDay),
         image_url: variant.imageUrl,
-        total_quantity: Number.parseInt(variant.totalQuantity),
-        available_quantity: Number.parseInt(variant.availableQuantity),
+        is_available: variant.isAvailable, // NEW FIELD
         owner_id: variant.ownerId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -461,15 +484,29 @@ export default function AddVehicleScreen({ navigation, route }) {
           <TouchableOpacity
             key={type}
             style={[styles.typeButton, formData.type === type && styles.selectedTypeButton]}
-            onPress={() => setFormData({ ...formData, type })}
+            onPress={() => handleTypeSelection(type)}
           >
             <Text style={[styles.typeButtonText, formData.type === type && styles.selectedTypeButtonText]}>{type}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
+      
+      {showCustomType && (
+        <View style={styles.customTypeContainer}>
+          <TextInput
+            style={styles.input}
+            value={customType}
+            onChangeText={setCustomType}
+            placeholder="Enter custom vehicle type (e.g., Coupe, Minivan)"
+            placeholderTextColor="#9ca3af"
+            autoFocus
+          />
+        </View>
+      )}
     </View>
   )
 
+  // MODIFIED: Updated variant rendering with availability toggle
   const renderColorVariant = (variant, index) => (
     <View key={variant.id} style={styles.variantCard}>
       <View style={styles.variantHeader}>
@@ -527,7 +564,7 @@ export default function AddVehicleScreen({ navigation, route }) {
         </View>
 
         <View style={[styles.inputGroup, styles.inputHalf]}>
-          <Text style={styles.label}>Price per Day ($) *</Text>
+          <Text style={styles.label}>Price per Day (₱) *</Text>
           <TextInput
             style={styles.input}
             value={variant.pricePerDay}
@@ -558,36 +595,41 @@ export default function AddVehicleScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.inputRow, isWeb && styles.inputRowWeb]}>
-        <View style={[styles.inputGroup, styles.inputHalf]}>
-          <Text style={styles.label}>Total Quantity *</Text>
-          <TextInput
-            style={styles.input}
-            value={variant.totalQuantity}
-            onChangeText={(text) => {
-              updateColorVariant(variant.id, 'totalQuantity', text)
-              if (Number.parseInt(text) < Number.parseInt(variant.availableQuantity)) {
-                updateColorVariant(variant.id, 'availableQuantity', text)
-              }
-            }}
-            placeholder="e.g., 2"
-            placeholderTextColor="#9ca3af"
-            keyboardType="numeric"
-          />
+      {/* NEW: Availability Toggle Section */}
+      <View style={[styles.availabilityContainer, {
+        backgroundColor: variant.isAvailable ? '#f0fdf4' : '#fef2f2',
+        borderColor: variant.isAvailable ? '#bbf7d0' : '#fecaca'
+      }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.availabilityLabel}>Vehicle Availability</Text>
+          <Text style={styles.availabilitySubtext}>
+            {variant.isAvailable 
+              ? 'This vehicle is available for rent'
+              : 'Unavailable (Maintenance/Issue)'}
+          </Text>
         </View>
-
-        <View style={[styles.inputGroup, styles.inputHalf]}>
-          <Text style={styles.label}>Available Quantity *</Text>
-          <TextInput
-            style={styles.input}
-            value={variant.availableQuantity}
-            onChangeText={(text) => updateColorVariant(variant.id, 'availableQuantity', text)}
-            placeholder="e.g., 2"
-            placeholderTextColor="#9ca3af"
-            keyboardType="numeric"
-          />
-        </View>
+        <TouchableOpacity
+          style={[styles.toggleSwitch, {
+            backgroundColor: variant.isAvailable ? '#22c55e' : '#ef4444'
+          }]}
+          onPress={() => updateColorVariant(variant.id, 'isAvailable', !variant.isAvailable)}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.toggleThumb, {
+            transform: [{ translateX: variant.isAvailable ? 24 : 0 }]
+          }]} />
+        </TouchableOpacity>
       </View>
+
+      {/* NEW: Warning message when unavailable */}
+      {!variant.isAvailable && (
+        <View style={styles.warningBox}>
+          <Ionicons name="warning" size={14} color="#991b1b" style={{ marginRight: 6 }} />
+          <Text style={styles.warningText}>
+            This vehicle will not appear as available to customers
+          </Text>
+        </View>
+      )}
     </View>
   )
 
@@ -709,7 +751,9 @@ export default function AddVehicleScreen({ navigation, route }) {
             <View style={styles.variantsHeader}>
               <View style={styles.variantsHeaderContent}>
                 <Text style={styles.sectionTitle}>Color Variants & Pricing</Text>
-                <Text style={styles.sectionSubtitle}>Add different color options with individual pricing and owners</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Add different color options. Same colors will be grouped automatically.
+                </Text>
               </View>
               <TouchableOpacity style={styles.addVariantButton} onPress={addColorVariant}>
                 <Ionicons name="add" size={16} color="#222" />
@@ -783,7 +827,7 @@ export default function AddVehicleScreen({ navigation, route }) {
                   No car owners found. Add owners in Car Owners section.
                 </Text>
               )}
-            </ScrollView>
+              </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -965,6 +1009,9 @@ const styles = StyleSheet.create({
   selectedTypeButtonText: {
     color: 'white',
   },
+  customTypeContainer: {
+    marginTop: 12,
+  },
   variantsHeader: {
     flexDirection: 'column',
     marginBottom: 20,
@@ -1098,7 +1145,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     width: '100%',
     maxWidth: 400,
-    maxHeight: '100%',
+    maxHeight: '80%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
@@ -1111,7 +1158,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#222',
+    borderBottomColor: '#e5e7eb',
   },
   pickerTitle: {
     fontSize: 18,
@@ -1122,13 +1169,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
-    borderBottomWidth: 2,
+    padding: 16,
+    borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
-    borderRadius: 16,
   },
   ownerPickerItemSelected: {
-    backgroundColor: '#f9fafb'
+    backgroundColor: '#f9fafb',
   },
   ownerPickerItemContent: {
     flexDirection: 'row',
@@ -1169,5 +1215,56 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     marginBottom: 4,
+  },
+  // NEW STYLES: Availability Toggle Section
+  availabilityContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 12,
+  },
+  availabilityLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  availabilitySubtext: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  toggleSwitch: {
+    width: 56,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    padding: 4,
+    position: 'relative',
+  },
+  toggleThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  warningBox: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: '#fee2e2',
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  warningText: {
+    fontSize: 12,
+    color: '#991b1b',
+    flex: 1,
   },
 })
