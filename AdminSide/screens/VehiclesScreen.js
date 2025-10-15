@@ -276,20 +276,20 @@ export default function VehiclesScreen({ navigation }) {
       bookingsSubscription.unsubscribe()
     }
   }, [])
-
+  
   const fetchVehicles = async () => {
     try {
       const { data: vehiclesData, error } = await supabase
         .from('vehicles')
-        .select('*')
+        .select('*') // This already includes type, seats, price_per_day
         .order('created_at', { ascending: false })
-
+  
       if (error) {
         console.error('Error fetching vehicles:', error)
         Alert.alert('Error', 'Failed to fetch vehicles')
         return
       }
-
+  
       setVehicles(vehiclesData || [])
     } catch (error) {
       console.error('Error in fetchVehicles:', error)
@@ -988,199 +988,216 @@ export default function VehiclesScreen({ navigation }) {
               </TouchableOpacity>
               
               {showMakeFilter && (
-                <View style={styles.filterDropdownMenu}>
-                  <TouchableOpacity
-                    style={styles.filterDropdownItem}
-                    onPress={() => {
-                      setSelectedMake("all")
-                      setShowMakeFilter(false)
-                    }}
-                  >
-                    <Text style={[styles.filterDropdownItemText, selectedMake === "all" && styles.filterDropdownItemTextActive]}>
-                      All Makes
-                    </Text>
-                  </TouchableOpacity>
-                  {getUniqueMakes.map(make => (
-                    <TouchableOpacity
-                      key={make}
-                      style={styles.filterDropdownItem}
-                      onPress={() => {
-                        setSelectedMake(make)
-                        setShowMakeFilter(false)
-                      }}
-                    >
-                      <Text style={[styles.filterDropdownItemText, selectedMake === make && styles.filterDropdownItemTextActive]}>
-                        {make}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Seats Filter Dropdown - FIXED */}
-            <View style={styles.filterDropdownContainer}>
-              <Text style={styles.filterDropdownLabel}>Seats</Text>
+            <ScrollView 
+              style={styles.filterDropdownMenu}
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={true}
+            >
               <TouchableOpacity
-                style={[styles.filterDropdown, selectedSeats !== "all" && styles.filterDropdownActive]}
+                style={styles.filterDropdownItem}
                 onPress={() => {
-                  setShowSeatsFilter(!showSeatsFilter)
-                  // Close other dropdowns
+                  setSelectedMake("all")
                   setShowMakeFilter(false)
-                  setShowTypeFilter(false)
-                  setShowPriceFilter(false)
                 }}
               >
-                <Text style={[styles.filterDropdownText, selectedSeats !== "all" && styles.filterDropdownTextActive]}>
-                  {selectedSeats === "all" ? "All Seats" : `${selectedSeats} seats`}
+                <Text style={[styles.filterDropdownItemText, selectedMake === "all" && styles.filterDropdownItemTextActive]}>
+                  All Makes
                 </Text>
-                <Ionicons 
-                  name={showSeatsFilter ? "chevron-up" : "chevron-down"} 
-                  size={16} 
-                  color={selectedSeats !== "all" ? "white" : "#6b7280"} 
-                />
               </TouchableOpacity>
-              
-              {showSeatsFilter && (
-                <View style={styles.filterDropdownMenu}>
-                  <TouchableOpacity
-                    style={styles.filterDropdownItem}
-                    onPress={() => {
-                      setSelectedSeats("all")
-                      setShowSeatsFilter(false)
-                    }}
-                  >
-                    <Text style={[styles.filterDropdownItemText, selectedSeats === "all" && styles.filterDropdownItemTextActive]}>
-                      All Seats
-                    </Text>
-                  </TouchableOpacity>
-                  {getUniqueSeats.map(seats => (
-                    <TouchableOpacity
-                      key={seats}
-                      style={styles.filterDropdownItem}
-                      onPress={() => {
-                        setSelectedSeats(seats.toString())
-                        setShowSeatsFilter(false)
-                      }}
-                    >
-                      <Text style={[styles.filterDropdownItemText, selectedSeats === seats.toString() && styles.filterDropdownItemTextActive]}>
-                        {seats} seats
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
+              {getUniqueMakes.map(make => (
+                <TouchableOpacity
+                  key={make}
+                  style={styles.filterDropdownItem}
+                  onPress={() => {
+                    setSelectedMake(make)
+                    setShowMakeFilter(false)
+                  }}
+                >
+                  <Text style={[styles.filterDropdownItemText, selectedMake === make && styles.filterDropdownItemTextActive]}>
+                    {make}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+          
             </View>
-          </View>
+{/* Seats Filter Dropdown */}
+<View style={styles.filterDropdownContainer}>
+  <Text style={styles.filterDropdownLabel}>Seats</Text>
+  <TouchableOpacity
+    style={[styles.filterDropdown, selectedSeats !== "all" && styles.filterDropdownActive]}
+    onPress={() => {
+      setShowSeatsFilter(!showSeatsFilter)
+      // Close other dropdowns
+      setShowMakeFilter(false)
+      setShowTypeFilter(false)
+      setShowPriceFilter(false)
+    }}
+  >
+    <Text style={[styles.filterDropdownText, selectedSeats !== "all" && styles.filterDropdownTextActive]}>
+      {selectedSeats === "all" ? "All Seats" : `${selectedSeats} seats`}
+    </Text>
+    <Ionicons 
+      name={showSeatsFilter ? "chevron-up" : "chevron-down"} 
+      size={16} 
+      color={selectedSeats !== "all" ? "white" : "#6b7280"} 
+    />
+  </TouchableOpacity>
+  
+  {showSeatsFilter && (
+    <ScrollView 
+      style={styles.filterDropdownMenu}
+      nestedScrollEnabled={true}
+      showsVerticalScrollIndicator={true}
+    >
+      <TouchableOpacity
+        style={styles.filterDropdownItem}
+        onPress={() => {
+          setSelectedSeats("all")
+          setShowSeatsFilter(false)
+        }}
+      >
+        <Text style={[styles.filterDropdownItemText, selectedSeats === "all" && styles.filterDropdownItemTextActive]}>
+          All Seats
+        </Text>
+      </TouchableOpacity>
+      {getUniqueSeats.map(seats => (
+        <TouchableOpacity
+          key={seats}
+          style={styles.filterDropdownItem}
+          onPress={() => {
+            setSelectedSeats(seats.toString())
+            setShowSeatsFilter(false)
+          }}
+        >
+          <Text style={[styles.filterDropdownItemText, selectedSeats === seats.toString() && styles.filterDropdownItemTextActive]}>
+            {seats} seats
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  )}
+</View>
+</View>
           
           <View style={styles.filterDropdownsGrid}>
             {/* Type Filter Dropdown - FIXED */}
-            <View style={styles.filterDropdownContainer}>
-              <Text style={styles.filterDropdownLabel}>Type</Text>
-              <TouchableOpacity
-                style={[styles.filterDropdown, selectedType !== "all" && styles.filterDropdownActive]}
-                onPress={() => {
-                  setShowTypeFilter(!showTypeFilter)
-                  // Close other dropdowns
-                  setShowMakeFilter(false)
-                  setShowSeatsFilter(false)
-                  setShowPriceFilter(false)
-                }}
-              >
-                <Text style={[styles.filterDropdownText, selectedType !== "all" && styles.filterDropdownTextActive]}>
-                  {selectedType === "all" ? "All Types" : selectedType}
-                </Text>
-                <Ionicons 
-                  name={showTypeFilter ? "chevron-up" : "chevron-down"} 
-                  size={16} 
-                  color={selectedType !== "all" ? "white" : "#6b7280"} 
-                />
-              </TouchableOpacity>
-              
-              {showTypeFilter && (
-                <View style={styles.filterDropdownMenu}>
-                  <TouchableOpacity
-                    style={styles.filterDropdownItem}
-                    onPress={() => {
-                      setSelectedType("all")
-                      setShowTypeFilter(false)
-                    }}
-                  >
-                    <Text style={[styles.filterDropdownItemText, selectedType === "all" && styles.filterDropdownItemTextActive]}>
-                      All Types
-                    </Text>
-                  </TouchableOpacity>
-                  {getUniqueTypes.map(type => (
-                    <TouchableOpacity
-                      key={type}
-                      style={styles.filterDropdownItem}
-                      onPress={() => {
-                        setSelectedType(type)
-                        setShowTypeFilter(false)
-                      }}
-                    >
-                      <Text style={[styles.filterDropdownItemText, selectedType === type && styles.filterDropdownItemTextActive]}>
-                        {type}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
+           {/* Type Filter Dropdown */}
+<View style={styles.filterDropdownContainer}>
+  <Text style={styles.filterDropdownLabel}>Type</Text>
+  <TouchableOpacity
+    style={[styles.filterDropdown, selectedType !== "all" && styles.filterDropdownActive]}
+    onPress={() => {
+      setShowTypeFilter(!showTypeFilter)
+      // Close other dropdowns
+      setShowMakeFilter(false)
+      setShowSeatsFilter(false)
+      setShowPriceFilter(false)
+    }}
+  >
+    <Text style={[styles.filterDropdownText, selectedType !== "all" && styles.filterDropdownTextActive]}>
+      {selectedType === "all" ? "All Types" : selectedType}
+    </Text>
+    <Ionicons 
+      name={showTypeFilter ? "chevron-up" : "chevron-down"} 
+      size={16} 
+      color={selectedType !== "all" ? "white" : "#6b7280"} 
+    />
+  </TouchableOpacity>
+  
+  {showTypeFilter && (
+    <ScrollView 
+      style={styles.filterDropdownMenu}
+      nestedScrollEnabled={true}
+      showsVerticalScrollIndicator={true}
+    >
+      <TouchableOpacity
+        style={styles.filterDropdownItem}
+        onPress={() => {
+          setSelectedType("all")
+          setShowTypeFilter(false)
+        }}
+      >
+        <Text style={[styles.filterDropdownItemText, selectedType === "all" && styles.filterDropdownItemTextActive]}>
+          All Types
+        </Text>
+      </TouchableOpacity>
+      {getUniqueTypes.map(type => (
+        <TouchableOpacity
+          key={type}
+          style={styles.filterDropdownItem}
+          onPress={() => {
+            setSelectedType(type)
+            setShowTypeFilter(false)
+          }}
+        >
+          <Text style={[styles.filterDropdownItemText, selectedType === type && styles.filterDropdownItemTextActive]}>
+            {type}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  )}
+</View>
 
-            {/* Price Filter Dropdown - FIXED */}
-            <View style={styles.filterDropdownContainer}>
-              <Text style={styles.filterDropdownLabel}>Price Range</Text>
-              <TouchableOpacity
-                style={[styles.filterDropdown, priceRange !== "all" && styles.filterDropdownActive]}
-                onPress={() => {
-                  setShowPriceFilter(!showPriceFilter)
-                  // Close other dropdowns
-                  setShowMakeFilter(false)
-                  setShowSeatsFilter(false)
-                  setShowTypeFilter(false)
-                }}
-              >
-                <Text style={[styles.filterDropdownText, priceRange !== "all" && styles.filterDropdownTextActive]}>
-                  {priceRange === "all" ? "All Prices" : 
-                   priceRange === "under-1000" ? "Under ₱1,000" :
-                   priceRange === "1000-2000" ? "₱1,000-₱2,000" :
-                   priceRange === "2000-5000" ? "₱2,000-₱5,000" :
-                   priceRange === "over-5000" ? "Over ₱5,000" : "All Prices"
-                  }
-                </Text>
-                <Ionicons 
-                  name={showPriceFilter ? "chevron-up" : "chevron-down"} 
-                  size={16} 
-                  color={priceRange !== "all" ? "white" : "#6b7280"} 
-                />
-              </TouchableOpacity>
-              
-              {showPriceFilter && (
-                <View style={styles.filterDropdownMenu}>
-                  {[
-                    { key: "all", label: "All Prices" },
-                    { key: "under-1000", label: "Under ₱1,000" },
-                    { key: "1000-2000", label: "₱1,000 - ₱2,000" },
-                    { key: "2000-5000", label: "₱2,000 - ₱5,000" },
-                    { key: "over-5000", label: "Over ₱5,000" }
-                  ].map(option => (
-                    <TouchableOpacity
-                      key={option.key}
-                      style={styles.filterDropdownItem}
-                      onPress={() => {
-                        setPriceRange(option.key)
-                        setShowPriceFilter(false)
-                      }}
-                    >
-                      <Text style={[styles.filterDropdownItemText, priceRange === option.key && styles.filterDropdownItemTextActive]}>
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
+{/* Price Filter Dropdown */}
+<View style={styles.filterDropdownContainer}>
+  <Text style={styles.filterDropdownLabel}>Price Range</Text>
+  <TouchableOpacity
+    style={[styles.filterDropdown, priceRange !== "all" && styles.filterDropdownActive]}
+    onPress={() => {
+      setShowPriceFilter(!showPriceFilter)
+      // Close other dropdowns
+      setShowMakeFilter(false)
+      setShowSeatsFilter(false)
+      setShowTypeFilter(false)
+    }}
+  >
+    <Text style={[styles.filterDropdownText, priceRange !== "all" && styles.filterDropdownTextActive]}>
+      {priceRange === "all" ? "All Prices" : 
+       priceRange === "under-1000" ? "Under ₱1,000" :
+       priceRange === "1000-2000" ? "₱1,000-₱2,000" :
+       priceRange === "2000-5000" ? "₱2,000-₱5,000" :
+       priceRange === "over-5000" ? "Over ₱5,000" : "All Prices"
+      }
+    </Text>
+    <Ionicons 
+      name={showPriceFilter ? "chevron-up" : "chevron-down"} 
+      size={16} 
+      color={priceRange !== "all" ? "white" : "#6b7280"} 
+    />
+  </TouchableOpacity>
+  
+  {showPriceFilter && (
+    <ScrollView 
+      style={styles.filterDropdownMenu}
+      nestedScrollEnabled={true}
+      showsVerticalScrollIndicator={true}
+    >
+      {[
+        { key: "all", label: "All Prices" },
+        { key: "under-1000", label: "Under ₱1,000" },
+        { key: "1000-2000", label: "₱1,000 - ₱2,000" },
+        { key: "2000-5000", label: "₱2,000 - ₱5,000" },
+        { key: "over-5000", label: "Over ₱5,000" }
+      ].map(option => (
+        <TouchableOpacity
+          key={option.key}
+          style={styles.filterDropdownItem}
+          onPress={() => {
+            setPriceRange(option.key)
+            setShowPriceFilter(false)
+          }}
+        >
+          <Text style={[styles.filterDropdownItemText, priceRange === option.key && styles.filterDropdownItemTextActive]}>
+            {option.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  )}
+</View>
           </View>
           
           {/* Clear Filters Button */}
@@ -1550,7 +1567,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e5e7eb",
     zIndex: 1000,
-    maxHeight: 200,
+    maxHeight: 250,
   },
   filterDropdownItem: {
     paddingHorizontal: 16,

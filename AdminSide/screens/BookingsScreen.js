@@ -246,7 +246,8 @@ const handleBookingAdded = async (newBooking) => {
           vehicles (
             make,
             model,
-            year
+            year,
+            type
           ),
           vehicle_variants (
             color,
@@ -272,7 +273,6 @@ const handleBookingAdded = async (newBooking) => {
       setRefreshing(false);
     }
   };
-  
 
   const fetchAvailableVehicles = async () => {
     const { data, error } = await supabase
@@ -288,10 +288,11 @@ const handleBookingAdded = async (newBooking) => {
           make,
           model,
           year,
-          price_per_day
+          price_per_day,
+          type
         )
       `)
-      .gt('available_quantity', 0); // only show available ones
+      .gt('available_quantity', 0);
   
     if (error) {
       console.error('Error fetching variants:', error);
@@ -299,7 +300,8 @@ const handleBookingAdded = async (newBooking) => {
     }
   
     setAvailableVehicles(data || []);
-    const types = [...new Set(data?.map(variant => variant.vehicles?.make) || [])];
+    // Change this line to use type instead of make
+    const types = [...new Set(data?.map(variant => variant.vehicles?.type).filter(Boolean) || [])];
     setVehicleTypes(types);
   };
   
@@ -405,7 +407,7 @@ const handleBookingAdded = async (newBooking) => {
 
     if (vehicleTypeFilter !== 'All') {
       filtered = filtered.filter(booking => 
-        booking.vehicles?.make === vehicleTypeFilter
+        booking.vehicles?.type === vehicleTypeFilter
       );
     }
 
@@ -1553,14 +1555,24 @@ const showConfirmation = (title, message, onConfirm) => {
         </Text>
       </View>
         
-          {item.vehicles && (
-            <View style={styles.bookingVehicleRow}>
-              <Ionicons name="car" size={12} color="#6b7280" />
-              <Text style={styles.vehicleInfo}>
-                {item.vehicles.year} {item.vehicles.make} {item.vehicles.model}
-              </Text>
-            </View>
-          )}
+      {item.vehicles && (
+  <>
+    <View style={styles.bookingVehicleRow}>
+      <Ionicons name="car" size={12} color="#6b7280" />
+      <Text style={styles.vehicleInfo}>
+        {item.vehicles.year} {item.vehicles.make} {item.vehicles.model}
+      </Text>
+    </View>
+    {item.vehicles.type && (
+      <View style={styles.bookingVehicleRow}>
+        <Ionicons name="pricetag" size={12} color="#6b7280" />
+        <Text style={styles.vehicleInfo}>
+          Type: {item.vehicles.type}
+        </Text>
+      </View>
+    )}
+  </>
+)}
   
           {item.vehicle_variants && (
             <>

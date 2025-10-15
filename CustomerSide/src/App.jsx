@@ -2107,7 +2107,7 @@ const FleetSection = ({ onRentClick, onOpenDetails }) => {
     return (
       <section
         ref={leftRef}
-        className="relative px-6 md:px-10 lg:px-20 py-10 sm:py-14 md:py-16 lg:py-20 text-gray-900"
+        className="relative mt-10 px-6 md:px-10 lg:px-20 py-10 sm:py-14 md:py-16 lg:py-20 text-gray-900"
         style={{
           backgroundImage: `url(${aboutcircle})`,
           backgroundSize: "cover",
@@ -2245,7 +2245,7 @@ const FleetSection = ({ onRentClick, onOpenDetails }) => {
     
       return (
         <>
-          <section className="py-20 ">
+          <section className="py-20 mt-10">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div 
                 ref={titleRef}
@@ -2416,7 +2416,7 @@ const ContactUs = () => {
   const [detailsRef, detailsVisible] = useScrollAnimation()
 
   return (
-    <section className="relative py-20 px-6 md:px-10 lg:px-20 text-gray-900">
+    <section className="relative mt-10 py-20 px-6 md:px-10 lg:px-20 text-gray-900">
       <div className="max-w-6xl mx-auto">
         {/* Title */}
         <div 

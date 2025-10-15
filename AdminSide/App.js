@@ -279,6 +279,37 @@ function MainNavigator() {
           }}
         />
 
+        
+<Tab.Screen
+          name="CarOwners"
+          component={CarOwnersStack}
+          options={{
+            headerShown: false,
+            title: '',
+            unmountOnBlur: true,
+            listeners: ({ navigation, route }) => ({
+              blur: () => {
+                try {
+                  const tabState = navigation.getState();
+                  const tabRoute = tabState.routes.find(r => r.name === route.name);
+                  const nestedKey = tabRoute?.state?.key;
+                  if (nestedKey) {
+                    navigation.dispatch({
+                      ...CommonActions.reset({
+                        index: 0,
+                        routes: [{ name: 'CarOwnersList' }],
+                      }),
+                      target: nestedKey,
+                    });
+                  }
+                } catch (err) {
+                  console.warn('CarOwners blur reset failed', err);
+                }
+              },
+            }),
+          }}
+        />
+
         <Tab.Screen
           name="Vehicles"
           component={VehiclesStack}
@@ -309,35 +340,6 @@ function MainNavigator() {
           }}
         />
 
-        <Tab.Screen
-          name="CarOwners"
-          component={CarOwnersStack}
-          options={{
-            headerShown: false,
-            title: '',
-            unmountOnBlur: true,
-            listeners: ({ navigation, route }) => ({
-              blur: () => {
-                try {
-                  const tabState = navigation.getState();
-                  const tabRoute = tabState.routes.find(r => r.name === route.name);
-                  const nestedKey = tabRoute?.state?.key;
-                  if (nestedKey) {
-                    navigation.dispatch({
-                      ...CommonActions.reset({
-                        index: 0,
-                        routes: [{ name: 'CarOwnersList' }],
-                      }),
-                      target: nestedKey,
-                    });
-                  }
-                } catch (err) {
-                  console.warn('CarOwners blur reset failed', err);
-                }
-              },
-            }),
-          }}
-        />
 
         <Tab.Screen
           name="Reports"
