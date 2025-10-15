@@ -17,8 +17,14 @@ function ChatForm({chatHistory, setChatHistory, generateBotResponse}) {
             //FOR 'THINKING' FOR CHATBOT RESPONSE
             setChatHistory((history) => [...history, {role:"model", text: "Thinking..."}])
             
-            //GENERATE BOT RESPONSE
-            generateBotResponse([...chatHistory, {role:"user", text: `Using the details provided above, please address this query: ${userMessage}` }]);
+            //GENERATE BOT RESPONSE with reinforced scope constraints
+            generateBotResponse([
+              ...chatHistory,
+              {
+                role:"user",
+                text: `Answer ONLY if related to The Rental Den - Cebu (vehicles, rates, booking, services, policies, contact). If outside scope, refuse and provide contact details. Query: ${userMessage}`
+              }
+            ]);
         }, 600);
     }
   return (

@@ -28,7 +28,7 @@ import EmailService from '../services/emailService';
 
 const { width } = Dimensions.get('window');
 
-export default function BookingsScreen() {
+export default function BookingsScreen({ route, navigation }) {
   
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [bookings, setBookings] = useState([]);
@@ -146,6 +146,59 @@ const handleBookingAdded = async (newBooking) => {
     fetchBookings();
     fetchAvailableVehicles();
   }, []);
+
+  // Handle navigation parameters to open specific booking in edit mode
+  useEffect(() => {
+    console.log('Navigation params check:', {
+      hasParams: !!route?.params,
+      openBookingId: route?.params?.openBookingId,
+      openInEditMode: route?.params?.openInEditMode,
+      bookingsLength: bookings.length,
+      allParams: route?.params
+    });
+
+    if (route?.params?.openBookingId && route?.params?.openInEditMode) {
+      console.log('Looking for booking with ID:', route.params.openBookingId);
+      
+      // Wait for bookings to be loaded, then find and open the specific booking
+      if (bookings.length > 0) {
+        // Keep as string since IDs are UUIDs
+        const targetBookingId = route.params.openBookingId;
+        const targetBooking = bookings.find(booking => booking.id === targetBookingId);
+        console.log('Target booking found:', !!targetBooking, targetBooking?.customer_name);
+        console.log('Searching for ID:', targetBookingId, 'Type:', typeof targetBookingId);
+        console.log('Available booking IDs:', bookings.map(b => ({ id: b.id, type: typeof b.id, name: b.customer_name })));
+        
+        if (targetBooking) {
+          console.log('Opening edit modal for booking:', targetBooking.customer_name);
+          // Small delay to ensure the screen is fully loaded
+          setTimeout(() => {
+            openEditModal(targetBooking);
+          }, 100);
+        } else {
+          console.log('Booking not found in current bookings list');
+        }
+      } else {
+        console.log('Bookings not loaded yet, length:', bookings.length);
+      }
+    }
+  }, [route?.params, bookings, openEditModal]);
+
+  // Additional effect to handle the case where bookings are loaded after navigation
+  useEffect(() => {
+    if (route?.params?.openBookingId && route?.params?.openInEditMode && bookings.length > 0) {
+      console.log('Secondary effect triggered - checking for booking again');
+      const targetBookingId = route.params.openBookingId;
+      const targetBooking = bookings.find(booking => booking.id === targetBookingId);
+      
+      if (targetBooking && !editModalVisible) {
+        console.log('Secondary effect: Opening edit modal for booking:', targetBooking.customer_name);
+        setTimeout(() => {
+          openEditModal(targetBooking);
+        }, 200);
+      }
+    }
+  }, [bookings, route?.params, editModalVisible, openEditModal]);
 
   useEffect(() => {
     filterBookings();
@@ -830,6 +883,7 @@ const showConfirmation = (title, message, onConfirm) => {
   };
 
   const openEditModal = useCallback((booking) => {
+    console.log('openEditModal called with booking:', booking?.customer_name, booking?.id);
     setSelectedBooking(booking);
     setEditModalVisible(true);
     Animated.timing(modalAnimation, {
@@ -837,7 +891,21 @@ const showConfirmation = (title, message, onConfirm) => {
       duration: 300,
       useNativeDriver: true,
     }).start();
-  }, [modalAnimation]);
+    console.log('Edit modal should be visible now');
+    
+    // Clear navigation parameters to prevent re-triggering
+    if (route?.params?.openBookingId) {
+      // Reset the route params to prevent the effect from running again
+      console.log('Clearing navigation parameters');
+      // Use navigation to clear params
+      if (navigation?.setParams) {
+        navigation.setParams({
+          openBookingId: undefined,
+          openInEditMode: undefined
+        });
+      }
+    }
+  }, [modalAnimation, route?.params, navigation]);
 
   const closeEditModal = useCallback(() => {
     Animated.timing(modalAnimation, {

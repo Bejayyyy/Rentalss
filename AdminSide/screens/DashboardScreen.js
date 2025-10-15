@@ -64,7 +64,7 @@ const NotificationBell = ({ notifications, onPress }) => {
 };
 
 // Notification Item Component
-const NotificationItem = ({ notification, onMarkRead, onRemove, setActionModalConfig }) => {
+const NotificationItem = ({ notification, onMarkRead, onRemove, setActionModalConfig, onNavigateToBooking }) => {
   const [showActions, setShowActions] = useState(false);
 
   const getNotificationIcon = (type) => {
@@ -84,6 +84,17 @@ const NotificationItem = ({ notification, onMarkRead, onRemove, setActionModalCo
 
   const icon = getNotificationIcon(notification.type);
 
+  // Handle notification press - mark as read and navigate to booking if it has booking_id
+  const handleNotificationPress = () => {
+    // Mark as read first
+    onMarkRead(notification.id);
+    
+    // Navigate to booking if it has a booking_id
+    if (notification.bookingId && onNavigateToBooking) {
+      onNavigateToBooking(notification.bookingId);
+    }
+  };
+
   return (
     <View style={styles.notificationWrapper}>
       <TouchableOpacity 
@@ -92,7 +103,7 @@ const NotificationItem = ({ notification, onMarkRead, onRemove, setActionModalCo
           !notification.read && styles.unreadNotification,
           showActions && styles.notificationItemActive
         ]}
-        onPress={() => onMarkRead(notification.id)}
+        onPress={handleNotificationPress}
         onLongPress={() => setShowActions(true)}
         delayLongPress={500}
       >
@@ -125,6 +136,20 @@ const NotificationItem = ({ notification, onMarkRead, onRemove, setActionModalCo
               <Text style={[styles.notificationActionText, { color: '#10b981' }]}>Mark as read</Text>
             </TouchableOpacity>
           )}
+          {notification.bookingId && (
+            <TouchableOpacity 
+              style={[styles.notificationActionButton, styles.viewBookingButton]}
+              onPress={() => { 
+                if (onNavigateToBooking) {
+                  onNavigateToBooking(notification.bookingId);
+                }
+                setShowActions(false); 
+              }}
+            >
+              <Ionicons name="eye-outline" size={16} color="#3b82f6" />
+              <Text style={[styles.notificationActionText, { color: '#3b82f6' }]}>View Booking</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity 
             style={[styles.notificationActionButton, styles.removeButton]}
             onPress={() => {
@@ -152,7 +177,7 @@ const NotificationItem = ({ notification, onMarkRead, onRemove, setActionModalCo
 };
 
 // Notifications Modal
-const NotificationsModal = ({ visible, notifications, onClose, onMarkRead, onMarkAllRead, onRemove, setActionModalConfig, onClearAll }) => {
+const NotificationsModal = ({ visible, notifications, onClose, onMarkRead, onMarkAllRead, onRemove, setActionModalConfig, onClearAll, onNavigateToBooking }) => {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={styles.modalContainer}>
@@ -180,6 +205,7 @@ const NotificationsModal = ({ visible, notifications, onClose, onMarkRead, onMar
               onMarkRead={onMarkRead}
               onRemove={onRemove}
               setActionModalConfig={setActionModalConfig}
+              onNavigateToBooking={onNavigateToBooking}
             />
           )}
           contentContainerStyle={styles.notificationsList}
@@ -199,7 +225,7 @@ const NotificationsModal = ({ visible, notifications, onClose, onMarkRead, onMar
 
 // Website Content Editor Modal
 // Website Content Editor Modal - FIXED WITH PROPER ERROR HANDLING
-const WebsiteContentModal = ({ visible, onClose, section, onSave }) => {
+const WebsiteContentModal = ({ visible, onClose, section, onSave, setActionModalConfig, setFeedbackModal }) => {
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -250,36 +276,59 @@ const WebsiteContentModal = ({ visible, onClose, section, onSave }) => {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!content || !content.content) {
-      Alert.alert('Error', 'No content to save');
+      setFeedbackModal({
+        visible: true,
+        type: "error",
+        message: "No content to save"
+      });
       return;
     }
 
-    setSaving(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
+    // Show confirmation modal first
+    setActionModalConfig({
+      title: 'Save Changes',
+      message: 'Are you sure you want to save these changes?',
+      loading: saving,
+      onConfirm: async () => {
+        setSaving(true);
+        // Update the action modal config to show loading state
+        setActionModalConfig(prev => ({ ...prev, loading: true }));
+        
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
 
-      const { error } = await supabase
-        .from('website_content')
-        .update({
-          content: content.content,
-          updated_at: new Date().toISOString(),
-          updated_by: user?.id
-        })
-        .eq('section', section);
+          const { error } = await supabase
+            .from('website_content')
+            .update({
+              content: content.content,
+              updated_at: new Date().toISOString(),
+              updated_by: user?.id
+            })
+            .eq('section', section);
 
-      if (error) throw error;
+          if (error) throw error;
 
-      Alert.alert('Success', 'Content updated successfully! Changes will appear on your website.');
-      onSave();
-      onClose();
-    } catch (err) {
-      console.error('Error saving content:', err);
-      Alert.alert('Error', 'Failed to save content');
-    } finally {
-      setSaving(false);
-    }
+          setFeedbackModal({
+            visible: true,
+            type: "success",
+            message: "Content updated successfully! Changes will appear on your website."
+          });
+          onSave();
+          onClose();
+        } catch (err) {
+          console.error('Error saving content:', err);
+          setFeedbackModal({
+            visible: true,
+            type: "error",
+            message: "Failed to save content"
+          });
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
   };
 
   const updateField = (field, value) => {
@@ -615,7 +664,7 @@ const WebsiteContentModal = ({ visible, onClose, section, onSave }) => {
 
 // Gallery Management Modal
 // Gallery Management Modal - FIXED WITH UPLOAD DATE
-const GalleryModal = ({ visible, onClose, onRefresh }) => {
+const GalleryModal = ({ visible, onClose, onRefresh, setActionModalConfig, setFeedbackModal }) => {
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -744,42 +793,47 @@ const GalleryModal = ({ visible, onClose, onRefresh }) => {
   };
 
   const deleteImage = async (imageId, imageUrl) => {
-    Alert.alert(
-      'Delete Image',
-      'Are you sure you want to delete this image?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const fileName = imageUrl.split('/').pop();
+    setActionModalConfig({
+      title: 'Delete Image',
+      message: 'Are you sure you want to delete this image? This action cannot be undone.',
+      loading: false,
+      onConfirm: async () => {
+        // Update the action modal config to show loading state
+        setActionModalConfig(prev => ({ ...prev, loading: true }));
+        
+        try {
+          const fileName = imageUrl.split('/').pop();
 
-              const { error: storageError } = await supabase.storage
-                .from('gallery')
-                .remove([fileName]);
+          const { error: storageError } = await supabase.storage
+            .from('gallery')
+            .remove([fileName]);
 
-              if (storageError) throw storageError;
+          if (storageError) throw storageError;
 
-              const { error: dbError } = await supabase
-                .from('gallery_images')
-                .delete()
-                .eq('id', imageId);
+          const { error: dbError } = await supabase
+            .from('gallery_images')
+            .delete()
+            .eq('id', imageId);
 
-              if (dbError) throw dbError;
+          if (dbError) throw dbError;
 
-              Alert.alert('Success', 'Image deleted successfully!');
-              fetchImages();
-              onRefresh();
-            } catch (err) {
-              console.error('Error deleting image:', err);
-              Alert.alert('Error', 'Failed to delete image');
-            }
-          }
+          setFeedbackModal({
+            visible: true,
+            type: "success",
+            message: "Image deleted successfully!"
+          });
+          fetchImages();
+          onRefresh();
+        } catch (err) {
+          console.error('Error deleting image:', err);
+          setFeedbackModal({
+            visible: true,
+            type: "error",
+            message: "Failed to delete image"
+          });
         }
-      ]
-    );
+      }
+    });
   };
 
   const toggleActive = async (imageId, currentStatus) => {
@@ -1003,7 +1057,7 @@ const GalleryModal = ({ visible, onClose, onRefresh }) => {
 // Around line 600-800 in your file
 
 // 👇 PASTE THE ENTIRE ContactModal COMPONENT HERE 👇
-const ContactModal = ({ visible, onClose, onRefresh }) => {
+const ContactModal = ({ visible, onClose, onRefresh, setActionModalConfig, setFeedbackModal }) => {
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1039,36 +1093,59 @@ const ContactModal = ({ visible, onClose, onRefresh }) => {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!content || !content.content) {
-      Alert.alert('Error', 'No content to save');
+      setFeedbackModal({
+        visible: true,
+        type: "error",
+        message: "No content to save"
+      });
       return;
     }
 
-    setSaving(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
+    // Show confirmation modal first
+    setActionModalConfig({
+      title: 'Save Changes',
+      message: 'Are you sure you want to save these contact information changes?',
+      loading: saving,
+      onConfirm: async () => {
+        setSaving(true);
+        // Update the action modal config to show loading state
+        setActionModalConfig(prev => ({ ...prev, loading: true }));
+        
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
 
-      const { error } = await supabase
-        .from('website_content')
-        .update({
-          content: content.content,
-          updated_at: new Date().toISOString(),
-          updated_by: user?.id
-        })
-        .eq('section', 'contact');
+          const { error } = await supabase
+            .from('website_content')
+            .update({
+              content: content.content,
+              updated_at: new Date().toISOString(),
+              updated_by: user?.id
+            })
+            .eq('section', 'contact');
 
-      if (error) throw error;
+          if (error) throw error;
 
-      Alert.alert('Success', 'Contact information updated successfully! Changes will appear on your website.');
-      onRefresh();
-      onClose();
-    } catch (err) {
-      console.error('Error saving contact:', err);
-      Alert.alert('Error', 'Failed to save contact information');
-    } finally {
-      setSaving(false);
-    }
+          setFeedbackModal({
+            visible: true,
+            type: "success",
+            message: "Contact information updated successfully! Changes will appear on your website."
+          });
+          onRefresh();
+          onClose();
+        } catch (err) {
+          console.error('Error saving contact:', err);
+          setFeedbackModal({
+            visible: true,
+            type: "error",
+            message: "Failed to save contact information"
+          });
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
   };
 
   const updateField = (field, value) => {
@@ -1795,6 +1872,29 @@ export default function DashboardScreen({ navigation }) {
     }
   };
 
+  const handleNavigateToBooking = (bookingId) => {
+    console.log('Navigating to booking with ID:', bookingId);
+    // Close notifications modal first
+    setShowNotifications(false);
+    
+    // Navigate to BookingsScreen with the specific booking to open
+    if (navigation && navigation.navigate) {
+      console.log('Calling navigation.navigate with params:', {
+        openBookingId: bookingId,
+        openInEditMode: true
+      });
+      navigation.navigate('Bookings', { 
+        screen: 'BookingsList',
+        params: {
+          openBookingId: bookingId,
+          openInEditMode: true 
+        }
+      });
+    } else {
+      console.log('Navigation not available');
+    }
+  };
+
   const formatCurrency = (amount) => {
     return `₱${parseFloat(amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
   };
@@ -2131,6 +2231,7 @@ export default function DashboardScreen({ navigation }) {
         onClearAll={handleClearAll} 
         onRemove={handleRemoveNotification}
         setActionModalConfig={setActionModalConfig}
+        onNavigateToBooking={handleNavigateToBooking}
       />
 
       {/* Website Content Editor Modal */}
@@ -2142,6 +2243,8 @@ export default function DashboardScreen({ navigation }) {
         }}
         section={contentSection}
         onSave={fetchDashboardData}
+        setActionModalConfig={setActionModalConfig}
+        setFeedbackModal={setFeedbackModal}
       />
 
       {/* Gallery Modal */}
@@ -2149,12 +2252,16 @@ export default function DashboardScreen({ navigation }) {
         visible={showGalleryModal}
         onClose={() => setShowGalleryModal(false)}
         onRefresh={fetchDashboardData}
+        setActionModalConfig={setActionModalConfig}
+        setFeedbackModal={setFeedbackModal}
       />
 
 <ContactModal
   visible={contactModalVisible}
   onClose={() => setContactModalVisible(false)}
-  onRefresh={fetchDashboardData}  // ✅ CORRECT
+  onRefresh={fetchDashboardData}
+  setActionModalConfig={setActionModalConfig}
+  setFeedbackModal={setFeedbackModal}
 />
 
       {/* Action Modal */}
@@ -2164,9 +2271,12 @@ export default function DashboardScreen({ navigation }) {
           type="confirm"
           title={actionModalConfig.title}
           message={actionModalConfig.message}
+          loading={actionModalConfig.loading || false}
           onClose={() => setActionModalConfig(null)}
-          onConfirm={() => {
-            actionModalConfig.onConfirm();
+          onConfirm={async () => {
+            if (actionModalConfig.onConfirm) {
+              await actionModalConfig.onConfirm();
+            }
             setActionModalConfig(null);
           }}
         />
@@ -2261,6 +2371,7 @@ export default function DashboardScreen({ navigation }) {
       paddingVertical: 6, borderRadius: 6, gap: 6
     },
     markReadButton: { backgroundColor: '#dcfce7' },
+    viewBookingButton: { backgroundColor: '#eff6ff' },
     removeButton: { backgroundColor: '#fee2e2' },
     cancelButton: { backgroundColor: '#f3f4f6' },
     notificationActionText: { fontSize: 12, fontWeight: '500' },

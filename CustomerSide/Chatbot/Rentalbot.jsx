@@ -3,6 +3,7 @@ import { companyInfo } from './companyInfo';
 import ChatForm from './ChatForm';
 import ChatMessage from './ChatMessage';
 import denni from './denni_logo.svg'
+import supabase from '../src/lib/supabase'
 function RentalBot() {
   const [chatHistory, setChatHistory] = useState([{
     hideInChat: true,
@@ -17,6 +18,96 @@ function RentalBot() {
   const updateHistory = (text, isError = false) => {
     setChatHistory(prev => [...prev.filter(msg => msg.text !== "Thinking..."), {role: "model", text, isError}]);
   }
+
+  // Load live vehicle catalog from Supabase and inject as hidden system context
+  useEffect(() => {
+    const loadVehicleCatalog = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('vehicles')
+          .select('id, make, model, year, type, seats, price_per_day, available, available_quantity')
+          .order('make', { ascending: true });
+
+        if (error) throw error;
+
+        const vehicles = Array.isArray(data) ? data : [];
+
+        // load variants with nested vehicle basics
+        const { data: variantsData, error: variantsError } = await supabase
+          .from('vehicle_variants')
+          .select(`
+            id,
+            color,
+            image_url,
+            available_quantity,
+            total_quantity,
+            vehicle_id,
+            vehicles (
+              make,
+              model,
+              year,
+              type,
+              seats,
+              price_per_day,
+              available
+            )
+          `)
+          .order('color', { ascending: true });
+
+        if (variantsError) throw variantsError;
+
+        const variants = Array.isArray(variantsData) ? variantsData : [];
+
+        // Build concise, structured catalog for LLM consumption
+        const catalog = {
+          schema: {
+            id: 'number',
+            make: 'string',
+            model: 'string',
+            year: 'number',
+            type: 'string',
+            seats: 'number',
+            price_per_day: 'number',
+            available: 'boolean',
+            available_quantity: 'number'
+          },
+          vehicles,
+          variants_schema: {
+            id: 'number',
+            color: 'string',
+            image_url: 'string|null',
+            available_quantity: 'number',
+            total_quantity: 'number',
+            vehicle_id: 'number',
+            vehicles: 'object (make, model, year, type, seats, price_per_day, available)'
+          },
+          vehicle_variants: variants
+        };
+
+        const instructions = [
+          'SCOPE: Only answer questions about The Rental Den - Cebu and its rentals/services. If out of scope, politely refuse and provide contact info.',
+          'PRIORITY SOURCES: 1) VEHICLE_CATALOG_JSON (live), 2) COMPANY_INFO (business details). Do not invent details.',
+          'VEHICLES: Use VEHICLE_CATALOG_JSON for availability, seats, and type. Filter seats by the "seats" field and type by the "type" field.',
+          'AVAILABILITY: Prefer vehicles with available === true. For specific colors/stock, consult vehicle_variants and prefer available_quantity > 0.',
+          'PRICING: Use price_per_day when quoting daily rates; format as ₱{amount}/day.',
+          'LIST FORMAT: make, model, year, type, seats, price_per_day. Mention availability if relevant.',
+          'IF NO MATCHES: Offer closest alternatives by seat range or similar type.',
+          'BOOKING: Prompt for rental dates, pickup location, and contact if the user wants to proceed.'
+        ].join('\n');
+
+        const hiddenContext = `INTERNAL_INSTRUCTIONS\n${instructions}\n\nVEHICLE_CATALOG_JSON\n${JSON.stringify(catalog)}`;
+
+        setChatHistory(prev => [
+          ...prev,
+          { role: 'model', text: hiddenContext, hideInChat: true }
+        ]);
+      } catch (e) {
+        // Do not surface errors to users; keep silent if catalog fails
+      }
+    };
+
+    loadVehicleCatalog();
+  }, []);
   const generateBotResponse = async (history) =>{
       //FORMAT CHAT HISTORY FOR API REQUEST
       history = history.map(({role, text}) => ({role, parts: [{ text }] }));

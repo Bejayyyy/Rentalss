@@ -33,6 +33,11 @@ export default function EditBookingModal({
   const [dateField, setDateField] = useState("");
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [deleteVisible, setDeleteVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   // Initialize booking data when component mounts or booking changes
   useEffect(() => {
@@ -88,12 +93,17 @@ export default function EditBookingModal({
       return;
     }
     
+    setLoading(true);
     try {
       await updateBooking(editableBooking);
+      setConfirmVisible(false);
+      setShowSuccessModal(true);
     } catch (error) {
       console.error("Error updating booking:", error);
+      setErrorMessage("Failed to update booking");
+      setShowErrorModal(true);
     } finally {
-      setConfirmVisible(false);
+      setLoading(false);
     }
   }, [updateBooking, editableBooking]);
 
@@ -111,12 +121,17 @@ export default function EditBookingModal({
       return;
     }
     
+    setDeleteLoading(true);
     try {
       await deleteBooking(editableBooking.id);
+      setDeleteVisible(false);
+      setShowSuccessModal(true);
     } catch (error) {
       console.error("Error deleting booking:", error);
+      setErrorMessage("Failed to delete booking");
+      setShowErrorModal(true);
     } finally {
-      setDeleteVisible(false);
+      setDeleteLoading(false);
     }
   }, [deleteBooking, editableBooking]);
 
@@ -371,6 +386,7 @@ export default function EditBookingModal({
                   title="Confirm Changes"
                   message="Are you sure you want to save these changes?"
                   confirmText="Save"
+                  loading={loading}
                   onClose={() => setConfirmVisible(false)}
                   onConfirm={handleConfirmSave}
                 />
@@ -381,8 +397,36 @@ export default function EditBookingModal({
                   title="Delete Booking"
                   message="Are you sure you want to delete this booking? This action cannot be undone."
                   confirmText="Delete"
+                  loading={deleteLoading}
                   onClose={() => setDeleteVisible(false)}
                   onConfirm={handleConfirmDelete}
+                />
+                
+                {/* SUCCESS MODAL */}
+                <ActionModal
+                  visible={showSuccessModal}
+                  type="success"
+                  title="Success"
+                  message="Booking updated successfully!"
+                  onClose={() => {
+                    setShowSuccessModal(false);
+                    closeEditModal();
+                  }}
+                  onConfirm={() => {
+                    setShowSuccessModal(false);
+                    closeEditModal();
+                  }}
+                />
+                
+                {/* ERROR MODAL */}
+                <ActionModal
+                  visible={showErrorModal}
+                  type="error"
+                  title="Error"
+                  message={errorMessage}
+                  confirmText="Close"
+                  onClose={() => setShowErrorModal(false)}
+                  onConfirm={() => setShowErrorModal(false)}
                 />
               </>
             )}

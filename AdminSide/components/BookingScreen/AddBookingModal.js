@@ -48,7 +48,10 @@ export default function AddBookingModal({
   const [loading, setLoading] = useState(false);
   const [vehiclePickerVisible, setVehiclePickerVisible] = useState(false);
   const [validationError, setValidationError] = useState("");
-const [showValidationModal, setShowValidationModal] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   // Reset form when modal opens/closes
   useEffect(() => {
@@ -188,7 +191,8 @@ const [showValidationModal, setShowValidationModal] = useState(false);
 
       if (error) {
         console.error('Add booking error:', error);
-        Alert.alert('Error', 'Failed to add booking');
+        setErrorMessage('Failed to add booking');
+        setShowErrorModal(true);
         return;
       }
 
@@ -205,18 +209,17 @@ const [showValidationModal, setShowValidationModal] = useState(false);
         }
       }
 
-      setConfirmVisible(false);
-      closeModal();
-      
       // Callback to parent to refresh data
       if (onBookingAdded) {
         await onBookingAdded(data);
       }
 
-      Alert.alert('Success', 'Booking added successfully');
+      setConfirmVisible(false);
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Add booking error:', error);
-      Alert.alert('Error', 'Something went wrong while adding booking');
+      setErrorMessage('Something went wrong while adding booking');
+      setShowErrorModal(true);
     } finally {
       setLoading(false);
     }
@@ -387,9 +390,12 @@ const [showValidationModal, setShowValidationModal] = useState(false);
               title="Add Booking"
               message="Are you sure you want to add this booking?"
               confirmText="Add Booking"
+              loading={loading}
               onClose={() => setConfirmVisible(false)}
               onConfirm={handleConfirmSave}
             />
+            
+            {/* VALIDATION ERROR MODAL */}
             <ActionModal
               visible={showValidationModal}
               type="error"
@@ -398,6 +404,33 @@ const [showValidationModal, setShowValidationModal] = useState(false);
               confirmText="Close"
               onClose={() => setShowValidationModal(false)}
               onConfirm={() => setShowValidationModal(false)}
+            />
+            
+            {/* SUCCESS MODAL */}
+            <ActionModal
+              visible={showSuccessModal}
+              type="success"
+              title="Success"
+              message="Booking added successfully!"
+              onClose={() => {
+                setShowSuccessModal(false);
+                closeModal();
+              }}
+              onConfirm={() => {
+                setShowSuccessModal(false);
+                closeModal();
+              }}
+            />
+            
+            {/* ERROR MODAL */}
+            <ActionModal
+              visible={showErrorModal}
+              type="error"
+              title="Error"
+              message={errorMessage}
+              confirmText="Close"
+              onClose={() => setShowErrorModal(false)}
+              onConfirm={() => setShowErrorModal(false)}
             />
           </Animated.View>
         </KeyboardAvoidingView>
