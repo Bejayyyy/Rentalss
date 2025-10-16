@@ -518,11 +518,13 @@ export default function CalendarComponent({
         ) : hasBookings ? (
           <View style={styles.dotsContainer}>
             {item.bookings.slice(0, 3).map((booking, index) => (
-              <View
-                key={index}
-                style={[styles.dot, { backgroundColor: getStatusColor(booking.status) }]}
-              />
-            ))}
+  <View
+    key={`${booking.id || booking.booking_id || 'no-id'}-${index}`}
+    style={[styles.dot, { backgroundColor: getStatusColor(booking.status) }]}
+  />
+))}
+
+
           </View>
         ) : null}
       </TouchableOpacity>
@@ -593,8 +595,13 @@ export default function CalendarComponent({
         </View>
 
         <View style={styles.calendarGrid}>
-          {generateCalendarDays().map((day) => renderDay({ item: day }))}
-        </View>
+  {generateCalendarDays().map((day) => (
+    <React.Fragment key={day.key}>
+      {renderDay({ item: day })}
+    </React.Fragment>
+  ))}
+</View>
+
       </View>
 
       {showLegend && (
@@ -668,7 +675,8 @@ export default function CalendarComponent({
               <FlatList
                 data={dayBookings}
                 renderItem={renderBookingItem}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item) => item.id?.toString() || item.booking_id?.toString()}
+
                 showsVerticalScrollIndicator={false}
                 style={styles.bookingsList}
               />
@@ -719,7 +727,8 @@ export default function CalendarComponent({
 
               {vehicleVariants.map((variant) => (
                 <TouchableOpacity
-                  key={variant.id}
+                  key={variant.id?.toString() || `variant-${Math.random()}`}
+
                   style={[
                     styles.vehicleOption,
                     selectedVariant === variant.id && styles.vehicleOptionSelected
@@ -822,9 +831,11 @@ const styles = StyleSheet.create({
     maxWidth: 80
   },
   calendarContainer: {
-    padding: 5,
-    marginLeft:10
-  },
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 5  
+},
   monthNavigation: {
     flexDirection: 'row',
     justifyContent: 'space-between',

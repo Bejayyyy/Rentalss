@@ -49,7 +49,7 @@ const NotificationBell = ({ notifications, onPress }) => {
         <Ionicons 
           name={unreadCount > 0 ? "notifications" : "notifications-outline"} 
           size={24} 
-          color={unreadCount > 0 ? "#FF6B35" : "#666"} 
+          color={unreadCount > 0 ? "#FF6B35" : "#222"} 
         />
       </Animated.View>
       {unreadCount > 0 && (
@@ -78,7 +78,7 @@ const NotificationItem = ({ notification, onMarkRead, onRemove, setActionModalCo
       case 'booking_confirmed': return { name: 'checkmark-circle', color: '#10b981' };
       case 'booking_completed': return { name: 'flag', color: '#3b82f6' };
       case 'status_change': return { name: 'swap-horizontal', color: '#8b5cf6' };
-      default: return { name: 'information-circle', color: '#666' };
+      default: return { name: 'information-circle', color: '#222' };
     }
   };
 
@@ -191,7 +191,7 @@ const NotificationsModal = ({ visible, notifications, onClose, onMarkRead, onMar
               <Text style={styles.clearAllText}>Clear all</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Ionicons name="close" size={24} color="#666" />
+              <Ionicons name="close" size={24} color="#222" />
             </TouchableOpacity>
           </View>
         </View>
@@ -285,50 +285,53 @@ const WebsiteContentModal = ({ visible, onClose, section, onSave, setActionModal
       });
       return;
     }
-
-    // Show confirmation modal first
-    setActionModalConfig({
-      title: 'Save Changes',
-      message: 'Are you sure you want to save these changes?',
-      loading: saving,
-      onConfirm: async () => {
-        setSaving(true);
-        // Update the action modal config to show loading state
-        setActionModalConfig(prev => ({ ...prev, loading: true }));
-        
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-
-          const { error } = await supabase
-            .from('website_content')
-            .update({
-              content: content.content,
-              updated_at: new Date().toISOString(),
-              updated_by: user?.id
-            })
-            .eq('section', section);
-
-          if (error) throw error;
-
-          setFeedbackModal({
-            visible: true,
-            type: "success",
-            message: "Content updated successfully! Changes will appear on your website."
-          });
-          onSave();
-          onClose();
-        } catch (err) {
-          console.error('Error saving content:', err);
-          setFeedbackModal({
-            visible: true,
-            type: "error",
-            message: "Failed to save content"
-          });
-        } finally {
-          setSaving(false);
+  
+    // Close the modal first, then show confirmation
+    onClose(); // 👈 Close modal first
+    
+    // Then show confirmation modal after a small delay
+    setTimeout(() => {
+      setActionModalConfig({
+        title: 'Save Changes',
+        message: 'Are you sure you want to save these changes?',
+        loading: saving,
+        onConfirm: async () => {
+          setSaving(true);
+          setActionModalConfig(prev => ({ ...prev, loading: true }));
+          
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+  
+            const { error } = await supabase
+              .from('website_content')
+              .update({
+                content: content.content,
+                updated_at: new Date().toISOString(),
+                updated_by: user?.id
+              })
+              .eq('section', section);
+  
+            if (error) throw error;
+  
+            setFeedbackModal({
+              visible: true,
+              type: "success",
+              message: "Content updated successfully! Changes will appear on your website."
+            });
+            onSave();
+          } catch (err) {
+            console.error('Error saving content:', err);
+            setFeedbackModal({
+              visible: true,
+              type: "error",
+              message: "Failed to save content"
+            });
+          } finally {
+            setSaving(false);
+          }
         }
-      }
-    });
+      });
+    }, 300); // Small delay to ensure modal closes first
   };
 
   const updateField = (field, value) => {
@@ -626,7 +629,7 @@ const WebsiteContentModal = ({ visible, onClose, section, onSave, setActionModal
             Edit {section === 'about_us' ? 'About Us' : section === 'how_it_works' ? 'How It Works' : 'FAQs'}
           </Text>
           <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={24} color="#666" />
+            <Ionicons name="close" size={24} color="#222" />
           </TouchableOpacity>
         </View>
 
@@ -881,7 +884,7 @@ const GalleryModal = ({ visible, onClose, onRefresh, setActionModalConfig, setFe
               </TouchableOpacity>
             )}
             <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color="#666" />
+              <Ionicons name="close" size={24} color="#222" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1030,11 +1033,11 @@ const GalleryModal = ({ visible, onClose, onRefresh, setActionModalConfig, setFe
                         <View style={styles.galleryItemStatus}>
                           <View style={[
                             styles.statusBadge,
-                            { backgroundColor: img.is_active ? '#dcfce7' : '#f3f4f6' }
+                            { backgroundColor: img.is_active ? '#222' : '#f3f4f6' }
                           ]}>
                             <Text style={[
                               styles.statusBadgeText,
-                              { color: img.is_active ? '#16a34a' : '#6b7280' }
+                              { color: img.is_active ? '#ffff' : '#6b7280' }
                             ]}>
                               {img.is_active ? 'Visible' : 'Hidden'}
                             </Text>
@@ -1102,50 +1105,53 @@ const ContactModal = ({ visible, onClose, onRefresh, setActionModalConfig, setFe
       });
       return;
     }
-
-    // Show confirmation modal first
-    setActionModalConfig({
-      title: 'Save Changes',
-      message: 'Are you sure you want to save these contact information changes?',
-      loading: saving,
-      onConfirm: async () => {
-        setSaving(true);
-        // Update the action modal config to show loading state
-        setActionModalConfig(prev => ({ ...prev, loading: true }));
-        
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-
-          const { error } = await supabase
-            .from('website_content')
-            .update({
-              content: content.content,
-              updated_at: new Date().toISOString(),
-              updated_by: user?.id
-            })
-            .eq('section', 'contact');
-
-          if (error) throw error;
-
-          setFeedbackModal({
-            visible: true,
-            type: "success",
-            message: "Contact information updated successfully! Changes will appear on your website."
-          });
-          onRefresh();
-          onClose();
-        } catch (err) {
-          console.error('Error saving contact:', err);
-          setFeedbackModal({
-            visible: true,
-            type: "error",
-            message: "Failed to save contact information"
-          });
-        } finally {
-          setSaving(false);
+  
+    // Close the modal first, then show confirmation
+    onClose(); // 👈 Close modal first
+    
+    // Then show confirmation modal after a small delay
+    setTimeout(() => {
+      setActionModalConfig({
+        title: 'Save Changes',
+        message: 'Are you sure you want to save these changes?',
+        loading: saving,
+        onConfirm: async () => {
+          setSaving(true);
+          setActionModalConfig(prev => ({ ...prev, loading: true }));
+          
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+  
+            const { error } = await supabase
+              .from('website_content')
+              .update({
+                content: content.content,
+                updated_at: new Date().toISOString(),
+                updated_by: user?.id
+              })
+              .eq('section', section);
+  
+            if (error) throw error;
+  
+            setFeedbackModal({
+              visible: true,
+              type: "success",
+              message: "Content updated successfully! Changes will appear on your website."
+            });
+            onSave();
+          } catch (err) {
+            console.error('Error saving content:', err);
+            setFeedbackModal({
+              visible: true,
+              type: "error",
+              message: "Failed to save content"
+            });
+          } finally {
+            setSaving(false);
+          }
         }
-      }
-    });
+      });
+    }, 300); // Small delay to ensure modal closes first
   };
 
   const updateField = (field, value) => {
@@ -1204,7 +1210,7 @@ const ContactModal = ({ visible, onClose, onRefresh, setActionModalConfig, setFe
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Edit Contact Information</Text>
           <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={24} color="#666" />
+            <Ionicons name="close" size={24} color="#222" />
           </TouchableOpacity>
         </View>
 
@@ -2427,7 +2433,7 @@ export default function DashboardScreen({ navigation }) {
       width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.6)',
       justifyContent: 'center', alignItems: 'center'
     },
-    activeBtn: { backgroundColor: 'rgba(34,197,94,0.8)' },
+    activeBtn: { backgroundColor: '#222' },
     deleteBtn: { backgroundColor: 'rgba(239,68,68,0.8)' },
     galleryItemInfo: { padding: 8 },
     galleryItemDate: { fontSize: 11, color: '#6b7280' },
@@ -2460,12 +2466,12 @@ export default function DashboardScreen({ navigation }) {
     },
 
     uploadFormContainer: {
-      backgroundColor: '#f0f9ff',
+      backgroundColor: '#f9fafb',
       borderRadius: 12,
       padding: 16,
       marginBottom: 20,
       borderWidth: 1,
-      borderColor: '#bfdbfe',
+      borderColor: '#f9fafb',
     },
     uploadFormTitle: {
       fontSize: 18,
@@ -2530,7 +2536,7 @@ export default function DashboardScreen({ navigation }) {
       gap: 8,
     },
     confirmButton: {
-      backgroundColor: '#16a34a',
+      backgroundColor: '#222',
     },
     cancelUploadButton: {
       backgroundColor: 'white',
